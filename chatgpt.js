@@ -95,24 +95,43 @@
   }
   function userSnapshot() {
     const nodes = userMessages();
-    return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)) };
+    return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)),
+      imageUrls: new Set(resultImages().map(img => img.currentSrc || img.src).filter(Boolean)) };
   }
   function assistantImagesAfterPrompt(prompt, snapshot) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
     // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
     const expected = normalizeText(prompt);
-    const userMessage = userMessages().reverse().find(node => {
+    const currentMessages = userMessages();
+    const isNewMessage = node => {
       const id = node.getAttribute("data-message-id");
-      const isNew = id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
+      return id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
+    };
+    const newMessages = currentMessages.filter(isNewMessage);
+    const userMessage = [...newMessages].reverse().find(node => {
       const actual = normalizeText(node.innerText);
       const promptPrefix = expected.slice(0, Math.min(120, expected.length));
-      return isNew && (actual.includes(expected) || actual.includes(promptPrefix));
-    });
-    if (!userMessage) return [];
+      return actual.includes(expected) || actual.includes(promptPrefix);
+    }) || (newMessages.length === 1 ? newMessages[0] : null);
     const main = document.querySelector("main");
     if (!main) return [];
-    return resultImages(main).filter(img =>
-      Boolean(userMessage.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING));
+    const imgs = resultImages(main);
+    if (userMessage) {
+      const scoped = imgs.filter(img =>
+        Boolean(userMessage.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING));
+      if (scoped.length) return scoped;
+    }
+
+    // Dự phòng cho giao diện tùy chỉnh nơi ChatGPT đổi cách render nội dung tin nhắn:
+    // chỉ nhận ảnh mới trong câu trả lời assistant được thêm sau thao tác gửi này.
+    // Ảnh cũ/lazy-load từ lịch sử bị loại bằng snapshot URL trước khi gửi.
+    const freshUrls = new Set(imgs.map(img => img.currentSrc || img.src).filter(url => url && !snapshot.imageUrls.has(url)));
+    if (!freshUrls.size) return [];
+    const freshImages = imgs.filter(img => freshUrls.has(img.currentSrc || img.src));
+    return freshImages.filter(img => {
+      const assistant = img.closest('[data-message-author-role="assistant"]');
+      return assistant && (!currentMessages.length || assistant.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_CONTAINED_BY);
+    });
   }
   function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.

@@ -89,6 +89,10 @@ async function chatgptPage(mode = 'success') {
     input.addEventListener('input', () => { button.disabled = false; });
     button.addEventListener('click', () => {
       if (mode === 'navigate') history.pushState({}, '', '/c/local-chatgpt%3Agenerated');
+      if (mode === 'mismatch') {
+        const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
+        userMessage.textContent = 'Nội dung đã được giao diện chuyển đổi'; document.querySelector('main').append(userMessage);
+      }
       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
       canvas.getContext('2d').fillRect(0, 0, 512, 512);
       const img = document.createElement('img'); img.src = canvas.toDataURL(); img.style.width = '300px';
@@ -179,6 +183,13 @@ async function panelPage() {
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(await page.evaluate(() => location.pathname), /^\/c\/local-chatgpt/); await page.close();
+  });
+  await check('ChatGPT: vẫn nhận ảnh mới khi giao diện biến đổi nội dung tin nhắn user', async () => {
+    const page = await chatgptPage('mismatch');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-mismatch', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
   await check('DOM textarea → một click → PNG', async () => {
     const page = await contentPage(); await runContent(page); const response = await result(page);
