@@ -34,12 +34,13 @@ test('Tên tệp chặn traversal, ký tự điều khiển và tên thiết b�
     assert.equal(result.split('/').length, 2);
     assert.ok(!/[\\<>:"|?*\u0000-\u001f\u202e]/.test(result));
     assert.ok(!result.split('/').some(part => /^\.+$/.test(part) || /[. ]$/.test(part)));
-    assert.ok(result.endsWith('/001_anh-batch.png'));
+    assert.ok(result.endsWith('/001_tuhamho.png'));
   }
   assert.equal(U.safeSegment('CON'), '_CON');
   assert.equal(U.safeSegment(''), 'Flow');
   assert.ok(!U.filename({ folder: 'Flow', serial: false }, 0, 'batch').includes('001_'));
-  assert.match(U.filename({ folder: 'Flow', serial: true }, 0, 'batch', 'mp4'), /\/001_video-batch\.mp4$/);
+  assert.match(U.filename({ folder: 'Flow', serial: true }, 0, 'batch', 'mp4'), /\/001_tuhamho\.mp4$/);
+  assert.match(U.filename({ folder: 'Flow', filenameBase: 'My: File', serial: true }, 1, 'batch'), /\/002_My- File\.png$/);
 });
 test('Đọc dòng UTF-8 BOM/CRLF/CR, giữ văn bản HTML nguyên dạng dữ liệu', () => {
   assert.deepEqual(U.parsePrompts('\uFEFF a\r\n \n b\rc\n<img onerror=x>'), ['a', 'b', 'c', '<img onerror=x>']);

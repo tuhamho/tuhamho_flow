@@ -2,7 +2,7 @@
 
 // Dùng chung trong panel và kiểm thử, không có thư viện hay mã từ xa.
 globalThis.FlowUtils = (() => {
-  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", serial: true, startFrom: "", delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow" });
+  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow" });
   function isFlowUrl(value) {
     try {
       const url = new URL(value);
@@ -72,14 +72,14 @@ globalThis.FlowUtils = (() => {
     if (!["image", "video"].includes(settings.mediaType)) throw new Error("Loại kết quả phải là ảnh hoặc video.");
     const provider = settings.provider === "chatgpt" ? "chatgpt" : "flow";
     if (provider === "chatgpt" && settings.mediaType !== "image") throw new Error("ChatGPT hiện chỉ hỗ trợ tạo ảnh.");
-    return { prompts, folder: safeSegment(settings.folder), serial: Boolean(settings.serial), startFrom, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
+    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
   }
   function filename(settings, index, batchId, extension = "png") {
     // Không đưa prompt vào tên tệp (tên tệp có thể xuất hiện trong lịch sử tải).
-    const prefix = settings.serial ? String(index + 1).padStart(3, "0") + "_" : "";
     const safeExtension = ["png", "jpg", "jpeg", "webp", "mp4", "webm"].includes(extension) ? extension : "png";
-    const stem = ["mp4", "webm"].includes(safeExtension) ? "video" : "anh";
-    return `${safeSegment(settings.folder)}/${prefix}${stem}-${safeSegment(batchId, "flow")}.${safeExtension}`;
+    const prefix = settings.serial ? `${String(index + 1).padStart(3, "0")}_` : "";
+    const unique = settings.serial ? "" : `-${safeSegment(batchId, "flow")}`;
+    return `${safeSegment(settings.folder)}/${prefix}${safeSegment(settings.filenameBase || "tuhamho", "tuhamho")}${unique}.${safeExtension}`;
   }
   return Object.freeze({ defaults, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, filename });
 })();

@@ -32,11 +32,15 @@
         <input id="startFrom" type="number" min="1" max="500" step="1" inputmode="numeric" placeholder="Tự tiếp tục" aria-describedby="startFromHint">
         <p id="startFromHint" class="hint">Để trống để tự tiếp tục từ mục chưa hoàn tất. Nhập số bất kỳ để chạy lại từ mục đó; các mục trước sẽ được bỏ qua.</p>
       </section>
+      <section class="block">
+        <label class="lbl" for="filenameBase">Tên file</label>
+        <input id="filenameBase" type="text" maxlength="100" value="tuhamho" autocomplete="off" aria-describedby="folderPreview">
+      </section>
       <section class="block grid2">
         <div><label class="lbl" for="folder">Thư mục lưu (trong Downloads)</label><input id="folder" type="text" maxlength="100" value="tuhamho_flow" autocomplete="off" aria-describedby="folderPreview"></div>
-        <div class="serial"><label class="lbl" for="serial">Đánh số</label><label class="switch"><input id="serial" type="checkbox" checked aria-label="Tự đánh số ảnh"><span class="slider" aria-hidden="true"></span></label></div>
+        <div class="serial"><label class="lbl" for="serial">Đánh số</label><label class="switch"><input id="serial" type="checkbox" checked aria-label="Tự đánh số tệp"><span class="slider" aria-hidden="true"></span></label></div>
       </section>
-      <p id="folderPreview" class="hint folder-note">Downloads / tuhamho_flow / …</p>
+      <p id="folderPreview" class="hint folder-note">Downloads / tuhamho_flow / 001_tuhamho.png</p>
       <section class="block">
         <span class="lbl">Nghỉ ngẫu nhiên giữa các ảnh (giây)</span>
         <div class="row delays"><input id="delayMin" type="number" min="0" max="3600" step="0.1" value="5" aria-label="Nghỉ ít nhất (giây)" required><span>đến</span><input id="delayMax" type="number" min="0" max="3600" step="0.1" value="15" aria-label="Nghỉ nhiều nhất (giây)" required></div>

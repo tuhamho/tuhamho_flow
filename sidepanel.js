@@ -2,7 +2,7 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
 const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
@@ -10,7 +10,7 @@ let saveTail = Promise.resolve();
 
 function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !text; }
 function settings() {
-  return { prompts: ui.prompts.value, folder: ui.folder.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
+  return { prompts: ui.prompts.value, folder: ui.folder.value, filenameBase: ui.filenameBase.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
     startFrom: ui.startFrom.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
 }
 function queueMatchesCurrent() {
@@ -48,7 +48,8 @@ function preview() {
   ui.tip.textContent = chatgpt
     ? "💡 Mở chatgpt.com, đăng nhập và chọn chế độ có thể tạo ảnh. Tiện ích gửi prompt theo thứ tự, chờ ảnh mới rồi tự tải. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống."
     : "💡 Chọn đúng tab Google Flow và loại Ảnh/Video; mỗi lượt chỉ tạo 1 kết quả. Có thể đóng panel hoặc chuyển tab sau khi bấm Bắt đầu. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.";
-  ui.folderPreview.textContent = `Downloads / ${U.safeSegment(ui.folder.value)} / ${ui.serial.checked ? "001_" : ""}${video ? "video-….mp4 hoặc .webm" : "anh-….png, .jpg hoặc .webp"}`;
+  const sampleExt = video ? ".mp4 hoặc .webm" : ".png, .jpg hoặc .webp";
+  ui.folderPreview.textContent = `Downloads / ${U.safeSegment(ui.folder.value)} / ${ui.serial.checked ? "001_" : ""}${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}${sampleExt}`;
   ui.mediaHint.textContent = video
     ? "Chờ video thật sẵn sàng, không lấy ảnh thumbnail. Nên tăng thời gian chờ trong Tùy chọn bổ sung."
     : "Chọn Ảnh khi Flow đang tạo ảnh. Không dùng ảnh thumbnail của video làm kết quả.";
@@ -203,7 +204,7 @@ ui.clear.addEventListener("click", async () => {
     const data = await chrome.storage.local.get(["settings", "queueState"]);
     const stored = data.settings || {};
     const restored = { ...U.defaults, ...stored };
-    for (const key of ["prompts", "folder", "startFrom", "delayMin", "delayMax", "timeout"]) {
+    for (const key of ["prompts", "folder", "filenameBase", "startFrom", "delayMin", "delayMax", "timeout"]) {
       ui[key].value = typeof restored[key] === "string" || typeof restored[key] === "number" ? restored[key] : U.defaults[key];
     }
     ui.serial.checked = typeof restored.serial === "boolean" ? restored.serial : U.defaults.serial;
