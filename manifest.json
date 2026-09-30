@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "tuhamho_flow — Flow & ChatGPT",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "minimum_chrome_version": "116",
   "description": "Chạy prompt tạo ảnh trên ChatGPT hoặc ảnh/video trên Google Flow. Dữ liệu lưu trên máy.",
   "permissions": ["sidePanel", "storage", "downloads"],

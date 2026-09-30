@@ -193,10 +193,21 @@ function handlePanelMessage(message, respond) {
       JSON.stringify(saved.prompts) === JSON.stringify(config.prompts) && Array.isArray(saved.items) && saved.items.length === config.prompts.length;
     const items = sameQueue ? config.prompts.map((prompt, index) => ({ prompt, status: saved.items[index]?.status || "pending", detail: saved.items[index]?.detail || "" }))
       : config.prompts.map(prompt => ({ prompt, status: "pending", detail: "" }));
-    const startIndex = items.findIndex(item => item.status !== "done");
-    const normalizedStart = startIndex < 0 ? 0 : startIndex;
-    if (startIndex < 0) for (const item of items) { item.status = "pending"; item.detail = ""; }
-    for (let i = normalizedStart; i < items.length; i++) if (items[i].status !== "done") { items[i].status = "pending"; items[i].detail = ""; }
+    // A value explicitly entered in the panel is one-based. It intentionally
+    // restarts from that item, while blank keeps the normal resume behavior.
+    let normalizedStart;
+    if (config.startFrom !== null) {
+      normalizedStart = config.startFrom - 1;
+      for (let i = 0; i < normalizedStart; i++) {
+        if (items[i].status !== "done") { items[i].status = "skipped"; items[i].detail = `Bỏ qua theo lựa chọn bắt đầu từ prompt ${config.startFrom}.`; }
+      }
+      for (let i = normalizedStart; i < items.length; i++) { items[i].status = "pending"; items[i].detail = ""; }
+    } else {
+      const startIndex = items.findIndex(item => !["done", "skipped"].includes(item.status));
+      normalizedStart = startIndex < 0 ? 0 : startIndex;
+      if (startIndex < 0) for (const item of items) { item.status = "pending"; item.detail = ""; }
+      for (let i = normalizedStart; i < items.length; i++) if (!["done", "skipped"].includes(items[i].status)) { items[i].status = "pending"; items[i].detail = ""; }
+    }
     const run = { provider: config.provider, mediaType: config.mediaType, tabId: message.tabId, items, index: normalizedStart,
       controller: new AbortController(), status: "Đang chuẩn bị…", error: "", finished: false, userStopped: false };
     activeRun = run; starting = false; publish(run);

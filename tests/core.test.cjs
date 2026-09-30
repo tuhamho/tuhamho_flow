@@ -47,7 +47,9 @@ test('Đọc dòng UTF-8 BOM/CRLF/CR, giữ văn bản HTML nguyên dạng dữ 
 test('Giới hạn đầu vào và khoảng chờ', () => {
   const valid = { ...U.defaults, prompts: 'one\ntwo' };
   assert.equal(U.validate(valid).prompts.length, 2);
-  for (const change of [{ prompts: '' }, { prompts: 'x'.repeat(10001) }, { prompts: 'x\n'.repeat(501) }, { delayMin: -1 }, { delayMin: 10, delayMax: 5 }, { delayMax: Infinity }, { timeout: 29 }, { timeout: 901 }, { mediaType: 'audio' }]) {
+  assert.equal(U.validate({ ...valid, startFrom: '2' }).startFrom, 2);
+  assert.equal(U.validate({ ...valid, startFrom: '' }).startFrom, null);
+  for (const change of [{ prompts: '' }, { prompts: 'x'.repeat(10001) }, { prompts: 'x\n'.repeat(501) }, { startFrom: '0' }, { startFrom: '3' }, { startFrom: '1.5' }, { startFrom: 'abc' }, { delayMin: -1 }, { delayMin: 10, delayMax: 5 }, { delayMax: Infinity }, { timeout: 29 }, { timeout: 901 }, { mediaType: 'audio' }]) {
     assert.throws(() => U.validate({ ...valid, ...change }));
   }
 });
@@ -84,7 +86,7 @@ test('Worker chỉ nhận điều khiển hàng đợi từ panel extension', as
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(status.ok, true); assert.equal(status.running, false); assert.equal(status.state, null);
 });
-test('Worker completes and downloads the queue without a sidepanel connection', async () => {
+test('Worker starts at a selected prompt and downloads the rest without a sidepanel connection', async () => {
   const onMessage = event(), downloadChanged = event();
   const stored = {};
   const promptsSent = [], downloads = [];
@@ -109,12 +111,12 @@ test('Worker completes and downloads the queue without a sidepanel connection', 
       search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
   } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
-  const config = { ...U.defaults, prompts: 'đầu\nsau', delayMin: '0', delayMax: '0' };
+  const config = { ...U.defaults, prompts: 'bỏ qua\ngiữa\ncuối', startFrom: '2', delayMin: '0', delayMax: '0' };
   const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, tabId: 7 },
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(started.ok, true);
   for (let i = 0; i < 50 && stored.queueState?.items?.filter(item => item.status === 'done').length !== 2; i++) await new Promise(resolve => setTimeout(resolve, 10));
-  assert.deepEqual(promptsSent, ['đầu', 'sau']);
+  assert.deepEqual(promptsSent, ['giữa', 'cuối']);
   assert.equal(downloads.length, 2);
-  assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'done']);
+  assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
 });

@@ -2,16 +2,16 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "clear", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
-const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
+const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
 let saveTail = Promise.resolve();
 
 function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !text; }
 function settings() {
   return { prompts: ui.prompts.value, folder: ui.folder.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
-    delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
+    startFrom: ui.startFrom.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
 }
 function queueMatchesCurrent() {
   return Boolean(queueMeta && queueMeta.provider === ui.provider.value && queueMeta.mediaType === ui.mediaType.value &&
@@ -19,7 +19,9 @@ function queueMatchesCurrent() {
 }
 function updateStartLabel() {
   if (currentRun) { ui.start.textContent = "Đang chạy nền…"; return; }
-  const firstOpen = queueMatchesCurrent() ? items.findIndex(item => item.status !== "done") : -1;
+  const selected = ui.startFrom.value.trim();
+  if (selected) { ui.start.textContent = `Bắt đầu từ prompt ${selected}`; return; }
+  const firstOpen = queueMatchesCurrent() ? items.findIndex(item => !["done", "skipped"].includes(item.status)) : -1;
   ui.start.textContent = firstOpen >= 0 ? `Tiếp tục từ prompt ${firstOpen + 1}` : "Bắt đầu";
 }
 function persistQueueState() {
@@ -31,7 +33,9 @@ function persistQueueState() {
   } });
 }
 function preview() {
-  ui.count.textContent = `${U.parsePrompts(ui.prompts.value).length} prompt`;
+  const promptCount = U.parsePrompts(ui.prompts.value).length;
+  ui.count.textContent = `${promptCount} prompt`;
+  ui.startFrom.max = String(Math.max(1, promptCount));
   const video = ui.mediaType.value === "video";
   const chatgpt = ui.provider.value === "chatgpt";
   ui.mediaBlock.hidden = chatgpt;
@@ -62,8 +66,9 @@ function scheduleSave() {
 }
 function render() {
   const completed = items.filter(item => item.status === "done").length;
-  ui.progress.textContent = `${completed} / ${items.length} hoàn thành`;
-  ui.bar.max = Math.max(1, items.length); ui.bar.value = completed;
+  const skipped = items.filter(item => item.status === "skipped").length;
+  ui.progress.textContent = skipped ? `${completed} xong · ${skipped} bỏ qua / ${items.length}` : `${completed} / ${items.length} hoàn thành`;
+  ui.bar.max = Math.max(1, items.length); ui.bar.value = completed + skipped;
   const nodes = items.map((item, index) => {
     const li = document.createElement("li"); li.className = `qitem ${item.status}`;
     const head = document.createElement("div"); head.className = "item-head";
@@ -198,7 +203,7 @@ ui.clear.addEventListener("click", async () => {
     const data = await chrome.storage.local.get(["settings", "queueState"]);
     const stored = data.settings || {};
     const restored = { ...U.defaults, ...stored };
-    for (const key of ["prompts", "folder", "delayMin", "delayMax", "timeout"]) {
+    for (const key of ["prompts", "folder", "startFrom", "delayMin", "delayMax", "timeout"]) {
       ui[key].value = typeof restored[key] === "string" || typeof restored[key] === "number" ? restored[key] : U.defaults[key];
     }
     ui.serial.checked = typeof restored.serial === "boolean" ? restored.serial : U.defaults.serial;
@@ -213,7 +218,7 @@ ui.clear.addEventListener("click", async () => {
       queueMeta = { provider: state.provider, mediaType: state.mediaType, prompts: restoredPrompts };
       items = restoredPrompts.map((prompt, index) => {
         const saved = state.items[index] || {};
-        const status = ["pending", "typing", "generating", "downloading", "done", "stopped", "error", "timeout"].includes(saved.status) ? saved.status : "pending";
+        const status = ["pending", "typing", "generating", "downloading", "done", "skipped", "stopped", "error", "timeout"].includes(saved.status) ? saved.status : "pending";
         const interrupted = ["typing", "generating", "downloading"].includes(status);
         return { prompt, status: interrupted ? "stopped" : status,
           detail: interrupted ? "Panel đã đóng khi mục này đang chạy. Kiểm tra tab dịch vụ trước khi tiếp tục." : String(saved.detail || "") };

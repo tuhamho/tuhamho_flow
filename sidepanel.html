@@ -27,6 +27,11 @@
         <textarea id="prompts" rows="6" maxlength="500000" placeholder="A red bicycle on a rainy street&#10;A watercolor fox in a forest&#10;..."></textarea>
         <div class="row"><button id="loadTxt" type="button" class="btn btn--ghost">📄 Tải file .txt</button><input id="txtFile" type="file" accept=".txt,text/plain" hidden><span id="count" class="count">0 prompt</span></div>
       </section>
+      <section class="block">
+        <label class="lbl" for="startFrom">Bắt đầu từ prompt số</label>
+        <input id="startFrom" type="number" min="1" max="500" step="1" inputmode="numeric" placeholder="Tự tiếp tục" aria-describedby="startFromHint">
+        <p id="startFromHint" class="hint">Để trống để tự tiếp tục từ mục chưa hoàn tất. Nhập số bất kỳ để chạy lại từ mục đó; các mục trước sẽ được bỏ qua.</p>
+      </section>
       <section class="block grid2">
         <div><label class="lbl" for="folder">Thư mục lưu (trong Downloads)</label><input id="folder" type="text" maxlength="100" value="tuhamho_flow" autocomplete="off" aria-describedby="folderPreview"></div>
         <div class="serial"><label class="lbl" for="serial">Đánh số</label><label class="switch"><input id="serial" type="checkbox" checked aria-label="Tự đánh số ảnh"><span class="slider" aria-hidden="true"></span></label></div>
