@@ -90,12 +90,32 @@
       if (job.controller.signal.aborted) onAbort();
     }).then(() => check(job));
   }
-  function resultImages() {
+  function assistantMessages() {
+    return [...document.querySelectorAll('main [data-message-author-role="assistant"]')];
+  }
+  function assistantSnapshot() {
+    const nodes = assistantMessages();
+    return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)) };
+  }
+  function newAssistantImages(snapshot) {
+    const freshMessages = assistantMessages().filter(node => {
+      const id = node.getAttribute("data-message-id");
+      return id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
+    });
+    // Chỉ xét message assistant mới nhất có ảnh. Ảnh cũ trong các lượt khác có
+    // thể được ChatGPT lazy-load sau đó và không được tính thành ảnh của prompt này.
+    for (const message of freshMessages.reverse()) {
+      const images = resultImages(message);
+      if (images.length) return images;
+    }
+    return [];
+  }
+  function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
     // Không dùng boundingClientRect ở đây: Chrome có thể trả kích thước bằng 0
     // cho nội dung chưa được vẽ của tab nền dù ảnh đã tải xong trong DOM.
-    // Giới hạn vào main, loại node ẩn tường minh và lọc avatar/icon theo kích thước.
-    return [...document.querySelectorAll("main img")].filter(img => {
+    // Giới hạn vào assistant message hiện tại, loại node ẩn và avatar/icon.
+    return [...(root?.querySelectorAll("img") || [])].filter(img => {
       if (!img.isConnected || img.closest('[hidden],[aria-hidden="true"],[inert]') || !img.complete ||
           img.naturalWidth < 256 || img.naturalHeight < 256) return false;
       const style = getComputedStyle(img);
@@ -110,7 +130,7 @@
     if (typeof message.prompt !== "string" || !message.prompt.trim() || message.prompt.length > 10000 ||
         !Number.isFinite(message.timeout) || message.timeout < 30 || message.timeout > 900) fail("INVALID");
     const editor = composer();
-    const old = new Set(resultImages().map(img => img.currentSrc || img.src).filter(Boolean));
+    const priorAssistantMessages = assistantSnapshot();
     report("typing");
     const request = `Tạo một hình ảnh dựa trên prompt sau. Chỉ tạo một ảnh.\n\n${message.prompt}`;
     await fill(editor, request, job);
@@ -121,7 +141,7 @@
     let candidate = "", stableSince = 0;
     while (Date.now() < deadline) {
       check(job);
-      const fresh = [...new Set(resultImages().map(img => img.currentSrc || img.src))].filter(src => src && !old.has(src));
+      const fresh = [...new Set(newAssistantImages(priorAssistantMessages).map(img => img.currentSrc || img.src))].filter(Boolean);
       if (fresh.length > 1) fail("GPT_MULTIPLE_IMAGES");
       if (fresh.length === 1 && !generating()) {
         if (candidate !== fresh[0]) { candidate = fresh[0]; stableSince = Date.now(); }

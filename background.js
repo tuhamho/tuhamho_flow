@@ -81,7 +81,7 @@ function queueError(code) {
     VIDEO_SOURCE_EXTERNAL: "Video nằm ngoài miền được phép tải. Hãy dùng nút tải Flow.", VIDEO_SOURCE_UNAVAILABLE: "Flow chưa cung cấp tệp video có thể đọc; tải bằng Flow.",
     VIDEO_PENDING_TIMEOUT: "Video vẫn đang xếp hàng khi hết thời gian chờ. Kiểm tra Flow; không gửi lại.",
     STOPPED: "Đã dừng theo yêu cầu.", BUSY: "Tab dịch vụ đang chạy một lượt khác.", NAVIGATED: "Tab dịch vụ đã chuyển trang; hàng đợi dừng.",
-    GPT_MULTIPLE_IMAGES: "ChatGPT hiện nhiều ảnh mới; dừng để tránh tải nhầm.", MULTIPLE_IMAGES: "Có nhiều ảnh mới; dừng để tránh tải nhầm.",
+    GPT_MULTIPLE_IMAGES: "Phản hồi ChatGPT hiện nhiều ảnh trong cùng một câu trả lời; đã dừng để tránh tải nhầm.", MULTIPLE_IMAGES: "Có nhiều ảnh mới; dừng để tránh tải nhầm.",
     MULTIPLE_VIDEOS: "Có nhiều video mới; dừng để tránh tải nhầm."
   };
   return messages[code] || `Không hoàn thành được tác vụ (${String(code).slice(0, 80)}). Kiểm tra tab dịch vụ.`;
