@@ -41,7 +41,7 @@ function preview() {
   ui.mediaBlock.hidden = chatgpt;
   ui.mediaType.disabled = chatgpt;
   ui.providerHint.textContent = chatgpt
-    ? "ChatGPT tạo ảnh qua giao diện web; mỗi prompt được gửi kèm yêu cầu tạo một ảnh."
+    ? "ChatGPT tạo ảnh qua giao diện web; mỗi tin nhắn có dòng Số thứ tự để bạn đối chiếu. Dòng này có thể ảnh hưởng đôi chút đến cách mô hình hiểu prompt."
     : "Mở dự án Google Flow và chọn đúng tab ở phần tùy chọn.";
   ui.tabLabel.textContent = chatgpt ? "Tab ChatGPT" : "Tab Google Flow";
   ui.flowTab.setAttribute("aria-label", chatgpt ? "Tab ChatGPT cần điều khiển" : "Tab Flow cần điều khiển");

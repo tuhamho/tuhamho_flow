@@ -90,9 +90,6 @@
       if (job.controller.signal.aborted) onAbort();
     }).then(() => check(job));
   }
-  function assistantMessages() {
-    return [...document.querySelectorAll('main [data-message-author-role="assistant"]')];
-  }
   function userMessages() {
     return [...document.querySelectorAll('main [data-message-author-role="user"]')];
   }
@@ -101,22 +98,21 @@
     return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)) };
   }
   function assistantImagesAfterRequest(request, snapshot) {
-    // Ghép kết quả với đúng tin nhắn vừa gửi, thay vì chỉ so tập ảnh toàn trang.
-    // Điều này tránh lấy ảnh cũ đang lazy-load hoặc ảnh của lượt trước.
+    // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
+    // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
     const expected = normalizeText(request);
     const userMessage = userMessages().reverse().find(node => {
       const id = node.getAttribute("data-message-id");
       const isNew = id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
-      return isNew && normalizeText(node.innerText) === expected;
+      const actual = normalizeText(node.innerText);
+      const promptPrefix = expected.slice(0, Math.min(120, expected.length));
+      return isNew && (actual.includes(expected) || actual.includes(promptPrefix));
     });
     if (!userMessage) return [];
-    const following = assistantMessages().filter(node =>
-      Boolean(userMessage.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING));
-    for (const message of following.reverse()) {
-      const images = resultImages(message);
-      if (images.length) return images;
-    }
-    return [];
+    const main = document.querySelector("main");
+    if (!main) return [];
+    return resultImages(main).filter(img =>
+      Boolean(userMessage.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING));
   }
   function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
@@ -136,11 +132,12 @@
   }
   async function runOne(message, job, report) {
     if (typeof message.prompt !== "string" || !message.prompt.trim() || message.prompt.length > 10000 ||
+        !Number.isInteger(message.index) || message.index < 1 || message.index > 500 ||
         !Number.isFinite(message.timeout) || message.timeout < 30 || message.timeout > 900) fail("INVALID");
     const editor = composer();
     const priorUserMessages = userSnapshot();
     report("typing");
-    const request = `Tạo một hình ảnh dựa trên prompt sau. Chỉ tạo một ảnh.\n\n${message.prompt}`;
+    const request = `Số thứ tự: ${message.index}. Chỉ dùng số này để đối chiếu thứ tự; không đưa chữ hoặc số này vào hình ảnh.\n\nTạo một hình ảnh dựa trên prompt sau. Chỉ tạo một ảnh.\n\n${message.prompt}`;
     await fill(editor, request, job);
     check(job);
     sendButton().click(); // Một lần gửi theo thao tác Bắt đầu của người dùng.

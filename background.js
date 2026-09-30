@@ -142,7 +142,7 @@ async function runQueue(run, config, startIndex) {
       check(run); const item = run.items[i]; run.index = i;
       item.status = "typing"; item.detail = ""; run.status = `Đang nhập prompt ${i + 1} / ${run.items.length}…`; publish(run);
       const id = crypto.randomUUID();
-      const result = await request(run.port, { type: "RUN", id, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType },
+      const result = await request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType },
         value => value?.type === "RESULT" && value.id === id,
         (config.timeout + (config.mediaType === "video" ? 120 : 20)) * 1000, run,
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
