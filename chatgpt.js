@@ -97,10 +97,10 @@
     const nodes = userMessages();
     return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)) };
   }
-  function assistantImagesAfterRequest(request, snapshot) {
+  function assistantImagesAfterPrompt(prompt, snapshot) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
     // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
-    const expected = normalizeText(request);
+    const expected = normalizeText(prompt);
     const userMessage = userMessages().reverse().find(node => {
       const id = node.getAttribute("data-message-id");
       const isNew = id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
@@ -146,7 +146,7 @@
     let candidate = "", stableSince = 0;
     while (Date.now() < deadline) {
       check(job);
-      const fresh = [...new Set(assistantImagesAfterRequest(request, priorUserMessages).map(img => img.currentSrc || img.src))].filter(Boolean);
+      const fresh = [...new Set(assistantImagesAfterPrompt(message.prompt, priorUserMessages).map(img => img.currentSrc || img.src))].filter(Boolean);
       if (fresh.length > 1) fail("GPT_MULTIPLE_IMAGES");
       if (fresh.length === 1 && !generating()) {
         if (candidate !== fresh[0]) { candidate = fresh[0]; stableSince = Date.now(); }
