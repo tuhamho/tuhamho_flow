@@ -97,7 +97,9 @@ async function chatgptPage(mode = 'success') {
       canvas.getContext('2d').fillRect(0, 0, 512, 512);
       const img = document.createElement('img'); img.src = canvas.toDataURL(); img.style.width = '300px';
       Object.defineProperty(img, 'currentSrc', { get: () => mode === 'evil' ? 'https://example.test/image.png' : 'https://chatgpt.com/backend-api/estuary/content?id=fresh.png' });
-      const message = document.createElement('div'); message.setAttribute('data-message-author-role', 'assistant'); message.append(img); document.querySelector('main').append(message);
+      const message = document.createElement('div');
+      if (mode !== 'missing-roles') message.setAttribute('data-message-author-role', 'assistant');
+      message.append(img); document.querySelector('main').append(message);
     });
   }, { mode });
   await page.addScriptTag({ path: path.join(root, 'shared.js') });
@@ -187,6 +189,13 @@ async function panelPage() {
   await check('ChatGPT: vẫn nhận ảnh mới khi giao diện biến đổi nội dung tin nhắn user', async () => {
     const page = await chatgptPage('mismatch');
     await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-mismatch', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: nhận ảnh mới khi giao diện bỏ thuộc tính role của tin nhắn', async () => {
+    const page = await chatgptPage('missing-roles');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-no-roles', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();

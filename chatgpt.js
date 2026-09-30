@@ -122,16 +122,11 @@
       if (scoped.length) return scoped;
     }
 
-    // Dự phòng cho giao diện tùy chỉnh nơi ChatGPT đổi cách render nội dung tin nhắn:
-    // chỉ nhận ảnh mới trong câu trả lời assistant được thêm sau thao tác gửi này.
-    // Ảnh cũ/lazy-load từ lịch sử bị loại bằng snapshot URL trước khi gửi.
+    // Dự phòng cho giao diện tùy chỉnh không còn thuộc tính role của tin nhắn:
+    // chỉ nhận URL ảnh mới xuất hiện sau thao tác gửi. Snapshot loại ảnh lịch sử.
     const freshUrls = new Set(imgs.map(img => img.currentSrc || img.src).filter(url => url && !snapshot.imageUrls.has(url)));
     if (!freshUrls.size) return [];
-    const freshImages = imgs.filter(img => freshUrls.has(img.currentSrc || img.src));
-    return freshImages.filter(img => {
-      const assistant = img.closest('[data-message-author-role="assistant"]');
-      return assistant && (!currentMessages.length || assistant.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_CONTAINED_BY);
-    });
+    return imgs.filter(img => freshUrls.has(img.currentSrc || img.src));
   }
   function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
