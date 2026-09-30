@@ -71,7 +71,9 @@
     check(job);
     return new Promise((resolve, reject) => {
       let settled = false;
-      const root = document.querySelector("main") || document.body;
+      // Quan sát toàn bộ cây tài liệu: ChatGPT có thể thay vùng <main> khi cập nhật
+      // câu trả lời. Quan sát riêng node main cũ khiến tab nền bỏ lỡ ảnh mới.
+      const root = document.documentElement;
       const finish = error => {
         if (settled) return;
         settled = true; clearTimeout(timer); observer.disconnect();
@@ -90,9 +92,15 @@
   }
   function resultImages() {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
-    // Tập nền chặn ảnh cũ; bộ lọc loại avatar/icon bằng ngưỡng kích thước và khả năng hiển thị.
-    return [...document.querySelectorAll("main img")].filter(img => visible(img) && img.complete &&
-      img.naturalWidth >= 256 && img.naturalHeight >= 256);
+    // Không dùng boundingClientRect ở đây: Chrome có thể trả kích thước bằng 0
+    // cho nội dung chưa được vẽ của tab nền dù ảnh đã tải xong trong DOM.
+    // Giới hạn vào main, loại node ẩn tường minh và lọc avatar/icon theo kích thước.
+    return [...document.querySelectorAll("main img")].filter(img => {
+      if (!img.isConnected || img.closest('[hidden],[aria-hidden="true"],[inert]') || !img.complete ||
+          img.naturalWidth < 256 || img.naturalHeight < 256) return false;
+      const style = getComputedStyle(img);
+      return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
+    });
   }
   function generating() {
     const stop = document.querySelector('[data-testid="stop-button"],button[aria-label*="Stop generating" i]');
