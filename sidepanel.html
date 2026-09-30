@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>tuhamho_flow</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Google Flow &amp; ChatGPT · v1.4</span></div></div></header>
+  <div id="conn" class="conn conn--off"><span class="dot" aria-hidden="true"></span><span id="connection" role="status">Đang kiểm tra kết nối…</span></div>
+  <form id="settings">
+    <fieldset id="fields" disabled>
+      <section class="block">
+        <label class="lbl" for="provider">Tạo bằng</label>
+        <select id="provider"><option value="flow">Google Flow (ảnh / video)</option><option value="chatgpt">ChatGPT (ảnh)</option></select>
+        <p id="providerHint" class="hint">Mở dự án Google Flow và chọn đúng tab ở phần tùy chọn.</p>
+      </section>
+      <section id="mediaBlock" class="block">
+        <label class="lbl" for="mediaType">Loại kết quả</label>
+        <select id="mediaType" aria-describedby="mediaHint"><option value="image">Ảnh (PNG / JPEG / WebP)</option><option value="video">Video (.mp4 / .webm)</option></select>
+        <p id="mediaHint" class="hint">Chọn cùng loại nội dung đang tạo trên Flow. Video xếp hàng lâu hơn ảnh.</p>
+      </section>
+      <section class="block">
+        <label class="lbl" for="prompts">Danh sách prompt</label>
+        <p class="hint">Mỗi dòng là một prompt. Bỏ qua dòng trống.</p>
+        <textarea id="prompts" rows="6" maxlength="500000" placeholder="A red bicycle on a rainy street&#10;A watercolor fox in a forest&#10;..."></textarea>
+        <div class="row"><button id="loadTxt" type="button" class="btn btn--ghost">📄 Tải file .txt</button><input id="txtFile" type="file" accept=".txt,text/plain" hidden><span id="count" class="count">0 prompt</span></div>
+      </section>
+      <section class="block grid2">
+        <div><label class="lbl" for="folder">Thư mục lưu (trong Downloads)</label><input id="folder" type="text" maxlength="100" value="tuhamho_flow" autocomplete="off" aria-describedby="folderPreview"></div>
+        <div class="serial"><label class="lbl" for="serial">Đánh số</label><label class="switch"><input id="serial" type="checkbox" checked aria-label="Tự đánh số ảnh"><span class="slider" aria-hidden="true"></span></label></div>
+      </section>
+      <p id="folderPreview" class="hint folder-note">Downloads / tuhamho_flow / …</p>
+      <section class="block">
+        <span class="lbl">Nghỉ ngẫu nhiên giữa các ảnh (giây)</span>
+        <div class="row delays"><input id="delayMin" type="number" min="0" max="3600" step="0.1" value="5" aria-label="Nghỉ ít nhất (giây)" required><span>đến</span><input id="delayMax" type="number" min="0" max="3600" step="0.1" value="15" aria-label="Nghỉ nhiều nhất (giây)" required></div>
+        <p class="hint">Để 0–0 nếu muốn chạy liền.</p>
+      </section>
+    </fieldset>
+    <div class="actions"><button id="start" type="submit" class="btn btn--primary" disabled>Bắt đầu</button><button id="stop" type="button" class="btn btn--danger" disabled>Dừng</button></div>
+    <div id="tip" class="tip">💡 Chọn đúng tab dịch vụ và loại nội dung. Có thể đóng panel sau khi bấm Bắt đầu; giữ tab dịch vụ mở để hàng đợi tiếp tục chạy nền.</div>
+    <section class="block" aria-label="Tiến độ hàng đợi">
+      <div class="qhead"><span class="lbl">Hàng đợi</span><span id="progress" class="count">0 / 0 hoàn thành</span></div>
+      <progress id="bar" max="1" value="0" aria-label="Số prompt hoàn thành"></progress>
+      <p id="status" role="status" aria-live="polite">Chưa chạy.</p><p id="error" role="alert" hidden></p><p id="current" class="current" hidden></p><ol id="queue" class="queue"></ol>
+    </section>
+    <details class="extra">
+      <summary>Tùy chọn bổ sung</summary>
+      <label id="tabLabel" class="lbl" for="flowTab">Tab Google Flow</label><div class="row"><select id="flowTab" aria-label="Tab cần điều khiển"></select><button id="refresh" type="button" class="btn btn--ghost">Làm mới</button></div>
+      <label class="lbl" for="timeout">Chờ mỗi ảnh tối đa (giây)</label><input id="timeout" type="number" min="30" max="900" value="240" required>
+      <button id="clear" type="button" class="btn btn--ghost">Xóa prompt và tiến độ đã lưu</button>
+      <p class="hint">Prompt và tùy chọn chỉ lưu trên máy. Không analytics, không debugger. Bấm Bắt đầu sẽ gửi prompt tới dịch vụ bạn chọn và có thể dùng hạn mức tài khoản.</p>
+    </details>
+  </form>
+  <script src="shared.js"></script><script src="sidepanel.js"></script>
+</body>
+</html>
