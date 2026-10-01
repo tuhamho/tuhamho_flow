@@ -155,14 +155,19 @@ async function runQueue(run, config, startIndex) {
       const cancelAtBoundary = config.provider === "chatgpt" && (i + 1) % config.batchEvery === 0;
       let result = await makeRequest(cancelAtBoundary);
       check(run);
-      while (!result.ok && result.code === "GPT_NO_BUTTON") {
+      while (!result.ok && ["GPT_NO_BUTTON", "GPT_NO_IMAGE"].includes(result.code)) {
+        const waitingForImage = result.code === "GPT_NO_IMAGE";
         item.status = "typing";
-        item.detail = "Chưa tìm thấy nút Gửi; sẽ thử lại sau 5 giây.";
-        run.status = `Chưa tìm thấy nút Gửi ở prompt ${i + 1}; thử lại sau 5 giây…`;
+        item.detail = waitingForImage
+          ? "ChatGPT chưa trả ảnh; sẽ gửi lại prompt này sau 5 giây."
+          : "Chưa tìm thấy nút Gửi; sẽ thử lại sau 5 giây.";
+        run.status = waitingForImage
+          ? `ChatGPT chưa trả ảnh ở prompt ${i + 1}; thử lại sau 5 giây…`
+          : `Chưa tìm thấy nút Gửi ở prompt ${i + 1}; thử lại sau 5 giây…`;
         publish(run);
         await sleep(5000, run);
         check(run);
-        item.detail = "Đang thử lại cùng prompt.";
+        item.detail = waitingForImage ? "Đang gửi lại prompt chưa có ảnh." : "Đang thử lại cùng prompt.";
         run.status = `Đang thử lại prompt ${i + 1}…`;
         publish(run);
         result = await makeRequest(cancelAtBoundary);
