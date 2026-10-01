@@ -92,6 +92,13 @@ async function chatgptPage(mode = 'success') {
       document.querySelector('main').append(stale);
     }
     const button = document.querySelector('button');
+    if (mode === 'unlabeled-send-no-form') {
+      const form = input.closest('form'); const wrapper = document.createElement('div'); form.replaceWith(wrapper); wrapper.append(input, button);
+    }
+    if (mode === 'unlabeled-send' || mode === 'unlabeled-send-no-form') {
+      button.removeAttribute('aria-label'); button.removeAttribute('data-testid'); button.textContent = '';
+      button.innerHTML = '<svg aria-hidden="true"><path d="M0 0h10v10H0z"></path></svg>';
+    }
     input.addEventListener('input', () => { button.disabled = false; });
     button.addEventListener('click', () => {
       window.sent = (window.sent || 0) + 1;
@@ -236,6 +243,21 @@ async function panelPage() {
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true, JSON.stringify(response)); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: gửi được khi nút mũi tên không có nhãn truy cập', async () => {
+    const page = await chatgptPage('unlabeled-send');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-unlabeled-send', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results.find(item => item.type === 'RESULT'));
+    const sent = await page.evaluate(() => window.sent);
+    assert.equal(response.ok, true); assert.equal(sent, 1); await page.close();
+  });
+  await check('ChatGPT: tìm nút mũi tên không nhãn khi composer không dùng form', async () => {
+    const page = await chatgptPage('unlabeled-send-no-form');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-unlabeled-no-form', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.equal(await page.evaluate(() => window.sent), 1); await page.close();
   });
   await check('ChatGPT: nút hủy giao diện khác không chặn tải ảnh', async () => {
     const page = await chatgptPage('normal');

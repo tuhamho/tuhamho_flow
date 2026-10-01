@@ -42,14 +42,39 @@
     // ChatGPT may render newlines as separate paragraphs; compare the text while ignoring layout whitespace.
     if (normalizeText(readText(composer())) !== normalizeText(text)) fail("GPT_INPUT_REJECTED");
   }
-  function sendButton() {
+  function sendButton(editor) {
     const candidates = [...document.querySelectorAll('button,[role="button"]')].filter(visible).filter(button => {
       if (button.disabled || button.getAttribute("aria-disabled") === "true") return false;
       const label = `${button.getAttribute("aria-label") || ""} ${button.getAttribute("data-testid") || ""} ${button.textContent || ""}`.toLowerCase();
       return /send|submit|gửi|composer-submit/.test(label) && !/stop|cancel|voice/.test(label);
     });
-    if (candidates.length !== 1) fail(candidates.length ? "GPT_BUTTON_AMBIGUOUS" : "GPT_NO_BUTTON");
-    return candidates[0];
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) fail("GPT_BUTTON_AMBIGUOUS");
+
+    // Current ChatGPT layouts may render the blue arrow without an accessible
+    // send label. Fall back only inside this prompt's form, preferring submit
+    // semantics and then the last enabled composer action after the editor.
+    let scope = editor?.closest('form,[data-testid*="composer" i]');
+    if (!scope) {
+      let ancestor = editor;
+      for (let depth = 0; depth < 6 && ancestor; depth++, ancestor = ancestor.parentElement) {
+        const actions = [...(ancestor.querySelectorAll?.('button,[role="button"]') || [])];
+        if (actions.length) { scope = ancestor; break; }
+      }
+    }
+    if (scope) {
+      const actions = [...scope.querySelectorAll('button,[role="button"]')].filter(button => {
+        if (!visible(button) || button.disabled || button.getAttribute("aria-disabled") === "true") return false;
+        const label = `${button.getAttribute("aria-label") || ""} ${button.getAttribute("data-testid") || ""} ${button.getAttribute("title") || ""}`.toLowerCase();
+        return !/stop|cancel|voice|microphone|attach|upload|tool|model|record|audio|dictation|menu/.test(label);
+      });
+      const submit = actions.filter(button => button.matches('button[type="submit"],[role="button"][type="submit"],[data-testid*="send" i],[data-testid*="submit" i]'));
+      if (submit.length === 1) return submit[0];
+      if (submit.length > 1) fail("GPT_BUTTON_AMBIGUOUS");
+      const afterEditor = actions.filter(button => Boolean(editor.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+      if (afterEditor.length) return afterEditor[afterEditor.length - 1];
+    }
+    fail("GPT_NO_BUTTON");
   }
   function check(job) {
     if (job.controller.signal.aborted) fail("STOPPED");
@@ -225,7 +250,7 @@
     const request = `Số thứ tự: ${message.index}. Chỉ dùng số này để đối chiếu thứ tự; không đưa chữ hoặc số này vào hình ảnh.\n\nTạo một hình ảnh dựa trên prompt sau. Chỉ tạo một ảnh.\n\n${message.prompt}`;
     await fill(editor, request, job);
     check(job);
-    sendButton().click(); // Một lần gửi theo thao tác Bắt đầu của người dùng.
+    sendButton(editor).click(); // Một lần gửi theo thao tác Bắt đầu của người dùng.
     report("generating");
     const deadline = Date.now() + message.timeout * 1000;
     let candidate = "", stableSince = 0, sawGenerating = false, stoppedWithoutImageSince = 0, batchCancelRequested = false;
