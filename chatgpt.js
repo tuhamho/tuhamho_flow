@@ -96,7 +96,8 @@
   function userSnapshot() {
     const nodes = userMessages();
     return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)),
-      imageUrls: new Set(resultImages().map(img => img.currentSrc || img.src).filter(Boolean)) };
+      imageUrls: new Set(resultImages().map(img => img.currentSrc || img.src).filter(Boolean)),
+      imageNodes: new Set(resultImages()) };
   }
   function assistantImagesAfterPrompt(prompt, snapshot) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
@@ -124,9 +125,14 @@
 
     // Dự phòng cho giao diện tùy chỉnh không còn thuộc tính role của tin nhắn:
     // chỉ nhận URL ảnh mới xuất hiện sau thao tác gửi. Snapshot loại ảnh lịch sử.
-    const freshUrls = new Set(imgs.map(img => img.currentSrc || img.src).filter(url => url && !snapshot.imageUrls.has(url)));
-    if (!freshUrls.size) return [];
-    return imgs.filter(img => freshUrls.has(img.currentSrc || img.src));
+    // Không tính img cũ chỉ vừa lazy-load sau khi gửi; chỉ lấy node ảnh mới được thêm.
+    // Dự phòng URL mới cho trường hợp trang tái sử dụng node ảnh có sẵn.
+    const freshNodes = imgs.filter(img => !snapshot.imageNodes.has(img));
+    if (freshNodes.length) return freshNodes;
+    return imgs.filter(img => {
+      const url = img.currentSrc || img.src;
+      return url && !snapshot.imageUrls.has(url);
+    });
   }
   function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
@@ -160,10 +166,17 @@
     let candidate = "", stableSince = 0;
     while (Date.now() < deadline) {
       check(job);
-      const fresh = [...new Set(assistantImagesAfterPrompt(message.prompt, priorUserMessages).map(img => img.currentSrc || img.src))].filter(Boolean);
-      if (fresh.length > 1) fail("GPT_MULTIPLE_IMAGES");
-      if (fresh.length === 1 && !generating()) {
-        if (candidate !== fresh[0]) { candidate = fresh[0]; stableSince = Date.now(); }
+      const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages)
+        .filter(img => (img.currentSrc || img.src) && FlowUtils.isChatGPTMediaUrl(img.currentSrc || img.src));
+      // ChatGPT may expose several URL variants/results in one response. Prefer the
+      // largest newly-added image; on equal dimensions use the last item in DOM order.
+      const selected = freshImages.reduce((best, img) => {
+        const area = img.naturalWidth * img.naturalHeight;
+        return !best || area >= best.naturalWidth * best.naturalHeight ? img : best;
+      }, null);
+      const fresh = selected ? selected.currentSrc || selected.src : "";
+      if (fresh && !generating()) {
+        if (candidate !== fresh) { candidate = fresh; stableSince = Date.now(); }
         if (Date.now() - stableSince >= 1800) {
           let url;
           try { url = new URL(candidate, location.href); } catch { fail("GPT_IMAGE_URL"); }

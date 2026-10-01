@@ -93,13 +93,17 @@ async function chatgptPage(mode = 'success') {
         const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
         userMessage.textContent = 'Nội dung đã được giao diện chuyển đổi'; document.querySelector('main').append(userMessage);
       }
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
-      canvas.getContext('2d').fillRect(0, 0, 512, 512);
-      const img = document.createElement('img'); img.src = canvas.toDataURL(); img.style.width = '300px';
-      Object.defineProperty(img, 'currentSrc', { get: () => mode === 'evil' ? 'https://example.test/image.png' : 'https://chatgpt.com/backend-api/estuary/content?id=fresh.png' });
-      const message = document.createElement('div');
-      if (mode !== 'missing-roles') message.setAttribute('data-message-author-role', 'assistant');
-      message.append(img); document.querySelector('main').append(message);
+      const imageCount = mode === 'multiple-images' ? 2 : 1;
+      for (let i = 0; i < imageCount; i++) {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+        canvas.getContext('2d').fillRect(0, 0, 512, 512);
+        const img = document.createElement('img'); img.src = canvas.toDataURL(); img.style.width = '300px';
+        Object.defineProperty(img, 'currentSrc', { get: () => mode === 'evil' ? 'https://example.test/image.png' :
+          `https://chatgpt.com/backend-api/estuary/content?id=fresh-${mode === 'multiple-images' ? i : ''}.png` });
+        const message = document.createElement('div');
+        if (mode !== 'missing-roles') message.setAttribute('data-message-author-role', 'assistant');
+        message.append(img); document.querySelector('main').append(message);
+      }
     });
   }, { mode });
   await page.addScriptTag({ path: path.join(root, 'shared.js') });
@@ -199,6 +203,13 @@ async function panelPage() {
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: chọn ảnh mới có độ phân giải cao nhất khi một phản hồi có nhiều ảnh', async () => {
+    const page = await chatgptPage('multiple-images');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-multiple', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /id=fresh-1\.png/); await page.close();
   });
   await check('DOM textarea → một click → PNG', async () => {
     const page = await contentPage(); await runContent(page); const response = await result(page);
