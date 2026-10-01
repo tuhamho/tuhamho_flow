@@ -190,8 +190,20 @@
     });
   }
   function stopGeneratingButton() {
-    return [...document.querySelectorAll('[data-testid="stop-button"],button[aria-label*="Stop generating" i],button[aria-label*="Dừng tạo" i]')]
-      .find(visible) || null;
+    // ChatGPT thay đổi testid và bản dịch của nút theo phiên bản/giao diện.
+    // Không dựa vào kích thước bounding box: tab nền đôi khi báo rect bằng 0.
+    const candidates = [...document.querySelectorAll(
+      '[data-testid*="stop" i],[data-testid*="cancel" i],button[aria-label],button[title]'
+    )];
+    return candidates.find(element => {
+      const label = [element.getAttribute("data-testid"), element.getAttribute("aria-label"),
+        element.getAttribute("title")].filter(Boolean).join(" ");
+      if (!/(?:stop|cancel|interrupt|dừng|dung|hủy|huy|ngừng|ngung)/i.test(label)) return false;
+      if (!element.isConnected || element.closest('[hidden],[aria-hidden="true"],[inert]')) return false;
+      const style = getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0 &&
+        element.getAttribute("aria-disabled") !== "true" && !element.disabled;
+    }) || null;
   }
   function generating() { return Boolean(stopGeneratingButton()); }
   async function runOne(message, job, report) {
@@ -218,7 +230,7 @@
       if (isGenerating) { sawGenerating = true; stoppedWithoutImageSince = 0; }
       if (message.cancelAfterSend && sawGenerating && !batchCancelRequested) {
         const stop = stopGeneratingButton();
-        if (stop) { stop.click(); batchCancelRequested = true; }
+        if (stop) { stop.click(); batchCancelRequested = true; report("batch-cancel"); }
       }
       if (batchCancelRequested) {
         if (!isGenerating) fail("GPT_BATCH_CANCELLED");
@@ -233,6 +245,9 @@
       // Ảnh phải là node/nút kết quả mới, sau prompt hiện tại. Dùng chính kết quả
       // mới làm tín hiệu hoàn tất vì trạng thái stop của ChatGPT có thể bị ẩn ở tab nền.
       if (fresh && !isGenerating) {
+        // A configured batch boundary must never quietly pass through if the
+        // site's stop control wasn't recognized. Keep the prompt retryable.
+        if (message.cancelAfterSend && !batchCancelRequested) fail("GPT_BATCH_CANCEL_FAILED");
         stoppedWithoutImageSince = 0;
         if (candidate !== fresh) { candidate = fresh; stableSince = Date.now(); }
         if (Date.now() - stableSince >= 1800) {
@@ -258,6 +273,7 @@
       }
       await waitForPageChange(1200, job);
     }
+    if (message.cancelAfterSend && !batchCancelRequested) fail("GPT_BATCH_CANCEL_FAILED");
     fail("GPT_TIMEOUT");
   }
   chrome.runtime.onMessage.addListener((message, sender, respond) => {

@@ -107,8 +107,11 @@ async function chatgptPage(mode = 'success') {
         const markedMessage = document.createElement('div'); markedMessage.setAttribute('data-message-author-role', 'user');
         markedMessage.textContent = 'Số thứ tự: 7. Nội dung đã được giao diện dựng lại'; document.querySelector('main').append(markedMessage);
       }
-      const stop = document.createElement('button'); stop.dataset.testid = 'stop-button'; stop.setAttribute('aria-label', 'Stop generating');
-      if (mode === 'batch-cancel') stop.addEventListener('click', () => { window.chatgptStopClicks = (window.chatgptStopClicks || 0) + 1; stop.remove(); });
+      const stop = document.createElement('button');
+      if (window.suppressStopRecognition) { stop.dataset.testid = 'busy-indicator'; stop.setAttribute('aria-label', 'Đang xử lý'); }
+      else if (mode === 'batch-cancel-vietnamese') stop.setAttribute('aria-label', 'Dừng');
+      else { stop.dataset.testid = 'stop-button'; stop.setAttribute('aria-label', 'Stop generating'); }
+      if (mode === 'batch-cancel' || mode === 'batch-cancel-vietnamese') stop.addEventListener('click', () => { window.chatgptStopClicks = (window.chatgptStopClicks || 0) + 1; stop.remove(); });
       document.querySelector('main').append(stop); setTimeout(() => stop.remove(), 100);
       if (mode === 'late-old-image') {
         const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
@@ -247,6 +250,23 @@ async function panelPage() {
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const result = await page.evaluate(() => ({ response: window.results.find(item => item.type === 'RESULT'), clicks: window.chatgptStopClicks || 0 }));
     assert.equal(result.response.ok, false); assert.equal(result.response.code, 'GPT_BATCH_CANCELLED'); assert.equal(result.clicks, 1); await page.close();
+  });
+  await check('ChatGPT: nhận diện nút Dừng tiếng Việt ở mốc chia đợt', async () => {
+    const page = await chatgptPage('batch-cancel-vietnamese');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-batch-cancel-vi', index: 10, cancelAfterSend: true, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const result = await page.evaluate(() => ({ response: window.results.find(item => item.type === 'RESULT'), clicks: window.chatgptStopClicks || 0 }));
+    assert.equal(result.response.ok, false); assert.equal(result.response.code, 'GPT_BATCH_CANCELLED'); assert.equal(result.clicks, 1); await page.close();
+  });
+  await check('ChatGPT: không bỏ qua mốc nếu không nhận diện được nút Dừng', async () => {
+    const page = await chatgptPage('batch-cancel');
+    await page.evaluate(() => {
+      window.suppressStopRecognition = true;
+      port.onMessage.emit({ type: 'RUN', id: 'gpt-batch-no-stop', index: 10, cancelAfterSend: true, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' });
+    });
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, false); assert.equal(response.code, 'GPT_BATCH_CANCEL_FAILED'); await page.close();
   });
   await check('ChatGPT: nhận ảnh DOM mới khi trang bỏ role tin nhắn user', async () => {
     const page = await chatgptPage('missing-user-role');

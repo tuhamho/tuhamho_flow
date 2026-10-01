@@ -77,7 +77,7 @@ function queueError(code) {
     BUTTON_DISABLED: "Nút tạo đang bị vô hiệu hóa.", FLOW_BUSY: "Tab dịch vụ đang xử lý tác vụ khác.", FLOW_ERROR: "Dịch vụ báo lỗi; kiểm tra tab.",
     TIMEOUT: "Hết thời gian chờ kết quả. Không tự gửi lại để tránh tạo trùng.", GPT_TIMEOUT: "Hết thời gian chờ ảnh ChatGPT. Kiểm tra tab trước khi chạy lại.",
     GPT_NO_IMAGE: "ChatGPT đã dừng trước khi trả ảnh. Mục này chưa hoàn thành; bấm Tiếp tục để thử lại đúng prompt này.",
-    GPT_BATCH_CANCEL_FAILED: "Không bấm được nút Dừng ChatGPT ở mốc 10 prompt. Hàng đợi đã dừng để tránh lệch thứ tự.",
+    GPT_BATCH_CANCEL_FAILED: "Không nhận diện/bấm được nút Dừng ChatGPT ở mốc chia đợt. Hàng đợi đã dừng để không chạy vượt prompt này; hãy kiểm tra tab rồi tiếp tục.",
     IMAGE_CORS: "Không tự tải được ảnh do CORS/miền URL. Tải bằng nút dịch vụ; không chạy lại prompt này.",
     GPT_IMAGE_URL: "Không tự tải được URL ảnh ChatGPT. Tải bằng nút ChatGPT; không gửi lại prompt.",
     VIDEO_SOURCE_EXTERNAL: "Video nằm ngoài miền được phép tải. Hãy dùng nút tải Flow.", VIDEO_SOURCE_UNAVAILABLE: "Flow chưa cung cấp tệp video có thể đọc; tải bằng Flow.",
