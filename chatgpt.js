@@ -157,15 +157,22 @@
     // The accessibility tree exposes generated results as a button labelled
     // "Ảnh được tạo 1" even on ChatGPT layouts without message-role attributes.
     const freshResultButtons = generatedImageButtons(main).filter(button =>
-      !snapshot.generatedButtons.has(button) && userMessage &&
-      Boolean(userMessage.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
-    const buttonImages = freshResultButtons.flatMap(button => resultImages(button)).filter(isFreshImage);
+      !snapshot.generatedButtons.has(button) && (!userMessage ||
+      Boolean(userMessage.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    const buttonImages = freshResultButtons.flatMap(button => resultImages(button)).filter(img =>
+      isFreshImage(img) && (userMessage || !snapshot.imageNodes.has(img)));
     if (buttonImages.length) return buttonImages;
     if (userMessage) {
       const scoped = imgs.filter(img =>
         isFreshImage(img) &&
         Boolean(userMessage.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING));
       if (scoped.length) return scoped;
+    } else {
+      // Một số phiên bản ChatGPT bỏ data-message-author-role khỏi DOM. Khi đó
+      // không thể ghép theo tin nhắn; chỉ nhận <img> mới được thêm sau snapshot.
+      // Không nhận node ảnh cũ đổi src muộn để tránh tải lại ảnh lịch sử.
+      const newlyInserted = imgs.filter(img => isFreshImage(img) && !snapshot.imageNodes.has(img));
+      if (newlyInserted.length) return newlyInserted;
     }
 
     return [];

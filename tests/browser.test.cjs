@@ -97,7 +97,8 @@ async function chatgptPage(mode = 'success') {
       window.sent = (window.sent || 0) + 1;
       if (mode === 'navigate') history.pushState({}, '', '/c/local-chatgpt%3Agenerated');
       if (mode !== 'mismatch') {
-        const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
+        const userMessage = document.createElement('div');
+        if (mode !== 'missing-user-role') userMessage.setAttribute('data-message-author-role', 'user');
         userMessage.textContent = input.value; document.querySelector('main').append(userMessage);
       }
       if (mode === 'marker-priority') {
@@ -235,6 +236,13 @@ async function panelPage() {
   await check('ChatGPT: ghép ảnh theo số thứ tự khi nội dung user bị dựng lại', async () => {
     const page = await chatgptPage('marker-priority');
     await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-marker', index: 7, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: nhận ảnh DOM mới khi trang bỏ role tin nhắn user', async () => {
+    const page = await chatgptPage('missing-user-role');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-no-user-role', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
