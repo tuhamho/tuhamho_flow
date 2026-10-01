@@ -91,6 +91,8 @@ test('Worker chỉ nhận điều khiển hàng đợi từ panel extension', as
   const status = await new Promise(resolve => onMessage.emit({ type: 'GET_QUEUE_STATUS' },
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(status.ok, true); assert.equal(status.running, false); assert.equal(status.state, null);
+  assert.equal(context.downloadedNameMatches('C:\\Downloads\\tuhamho_flow\\052_scene_tuhamho.png', 'tuhamho_flow/052_scene_tuhamho.png'), true);
+  assert.equal(context.downloadedNameMatches('C:\\Downloads\\tuhamho_flow\\051_scene_tuhamho.png', 'tuhamho_flow/052_scene_tuhamho.png'), false);
 });
 test('Worker starts at a selected prompt and downloads the rest without a sidepanel connection', async () => {
   const onMessage = event(), downloadChanged = event();
@@ -114,7 +116,8 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
     storage: { local: { setAccessLevel: async () => {}, get: async () => ({ queueState: stored.queueState }), set: async value => Object.assign(stored, value) } },
     tabs: { get: async () => ({ url: 'https://flow.google.com/project/test' }), sendMessage: async () => ({ ok: true }), connect: createPort },
     downloads: { onChanged: downloadChanged, download: async options => { downloads.push(options); return downloads.length; },
-      search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
+      search: async ({ id }) => { const item = downloads[id - 1]; return [{ id, state: 'complete', url: item?.url,
+        filename: `C:\\Downloads\\${item?.filename.replace(/\//g, '\\')}`, fileSize: 4, mime: 'image/png', finalUrl: item?.url }]; }, cancel: async () => {} }
   } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
   const config = { ...U.defaults, prompts: 'bỏ qua\ngiữa\ncuối', startFrom: '2', delayMin: '0', delayMax: '0' };
@@ -146,7 +149,8 @@ test('Worker stops before downloading a repeated ChatGPT image URL', async () =>
       storage: { local: { setAccessLevel: async () => {}, get: async () => ({ queueState: stored.queueState }), set: async value => Object.assign(stored, value) } },
       tabs: { get: async () => ({ url: 'https://chatgpt.com/c/test' }), sendMessage: async () => ({ ok: true }), connect: createPort },
       downloads: { onChanged: downloadChanged, download: async options => { downloads.push(options); return downloads.length; },
-        search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
+        search: async ({ id }) => { const item = downloads[id - 1]; return [{ id, state: 'complete', url: item?.url,
+          filename: `C:\\Downloads\\${item?.filename.replace(/\//g, '\\')}`, fileSize: 4, mime: 'image/png', finalUrl: item?.url }]; }, cancel: async () => {} }
     } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
   const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts: 'first\nsecond', delayMin: '0', delayMax: '0' };

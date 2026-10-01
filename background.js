@@ -87,6 +87,20 @@ function queueError(code) {
   };
   return messages[code] || `Không hoàn thành được tác vụ (${String(code).slice(0, 80)}). Kiểm tra tab dịch vụ.`;
 }
+function downloadedNameMatches(actual, requested) {
+  if (typeof actual !== "string" || !actual) return false;
+  const normalize = value => value.replace(/\//g, "\\").toLowerCase();
+  const actualPath = normalize(actual), requestedPath = normalize(requested);
+  const actualLeaf = actualPath.split("\\").pop(), requestedLeaf = requestedPath.split("\\").pop();
+  const requestedDir = requestedPath.slice(0, requestedPath.lastIndexOf("\\"));
+  const actualDir = actualPath.slice(0, actualPath.lastIndexOf("\\"));
+  if (requestedDir && !actualDir.endsWith(`\\${requestedDir}`)) return false;
+  if (actualLeaf === requestedLeaf) return true;
+  const dot = requestedLeaf.lastIndexOf(".");
+  if (dot < 0 || !actualLeaf.endsWith(requestedLeaf.slice(dot))) return false;
+  const suffix = actualLeaf.slice(requestedLeaf.slice(0, dot).length, actualLeaf.length - requestedLeaf.slice(dot).length);
+  return /^ \(\d+\)$/.test(suffix); // Chrome's conflictAction: uniquify suffix.
+}
 async function downloadResult(result, filename, extension, run) {
   check(run);
   const mime = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", mp4: "video/mp4", webm: "video/webm" }[extension];
@@ -119,6 +133,20 @@ async function downloadResult(result, filename, extension, run) {
     }).catch(() => finish(new Error("Không kiểm tra được trạng thái tải tệp.")));
   });
   check(run);
+  const [file] = await chrome.downloads.search({ id });
+  const expectedMediaUrl = result.downloadUrl || result.dataUrl;
+  if (!file || file.state !== "complete" || file.url !== expectedMediaUrl || !downloadedNameMatches(file.filename, filename) ||
+      (Number.isFinite(file.fileSize) && file.fileSize <= 0)) {
+    throw new Error("Tệp đã tải không khớp ảnh/URL hoặc số thứ tự của prompt hiện tại; mục chưa được xác nhận hoàn thành.");
+  }
+  if (file.mime && file.mime !== mime && file.mime !== "application/octet-stream") {
+    throw new Error("Tệp tải về sai định dạng so với ảnh/video được chọn; mục chưa được xác nhận hoàn thành.");
+  }
+  if (result.downloadUrl) {
+    const finalUrlAllowed = run.provider === "chatgpt" ? U.isChatGPTMediaUrl(file.finalUrl) : U.isFlowMediaUrl(file.finalUrl);
+    if (!finalUrlAllowed) throw new Error("URL cuối của tệp tải không thuộc miền ảnh dịch vụ; mục chưa được xác nhận.");
+  }
+  return file;
 }
 async function runQueue(run, config, startIndex) {
   const service = run.provider === "chatgpt" ? "ChatGPT" : "Flow";

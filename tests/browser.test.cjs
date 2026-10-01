@@ -183,9 +183,10 @@ async function panelPage() {
       storage: { local: { get: async () => mock.values, set: async value => { Object.assign(mock.values, value); }, remove: async key => { delete mock.values[key]; } } },
       tabs: { query: async () => mock.chatgpt ? [{ id: 8, url: 'https://chatgpt.com/c/test', active: true }] : [{ id: 7, url: 'https://flow.google.com/project/test', active: true }], get: async id => ({ id, url: mock.chatgpt ? 'https://chatgpt.com/c/test' : 'https://flow.google.com/project/test' }), sendMessage: async () => ({ ok: true, hasInput: true }), connect: () => port('content'), onRemoved: event(), onUpdated: event() },
       downloads: { onChanged: event(), download: async options => { mock.downloads.push(options); return mock.downloads.length; },
-        search: async ({ id }) => [{ id, state: mock.mode === 'download-wait' ? 'in_progress' : mock.mode === 'download-error' ? 'interrupted' : 'complete',
+        search: async ({ id }) => { const item = mock.downloads[id - 1]; return [{ id, state: mock.mode === 'download-wait' ? 'in_progress' : mock.mode === 'download-error' ? 'interrupted' : 'complete',
           mime: mock.mode === 'direct-html' ? 'text/html' : mock.mode === 'direct-video' ? 'video/mp4' : 'image/png',
-          finalUrl: mock.mode === 'direct-chatgpt' ? 'https://chatgpt.com/backend-api/estuary/content?id=generated.png' : mock.mode === 'direct-html' ? 'https://lh3.googleusercontent.com/flow-result.png' : undefined }],
+          url: item?.url, filename: `C:\\Downloads\\${item?.filename.replace(/\//g, '\\')}`, fileSize: 1024,
+          finalUrl: mock.mode === 'direct-chatgpt' ? 'https://chatgpt.com/backend-api/estuary/content?id=generated.png' : mock.mode === 'direct-html' ? 'https://lh3.googleusercontent.com/flow-result.png' : item?.url }]; },
         cancel: async id => { mock.cancels.push(id); }
       }
     };
