@@ -134,34 +134,37 @@
   function userSnapshot() {
     const nodes = userMessages();
     const main = document.querySelector("main");
+    const imageNodes = new Set(main?.querySelectorAll("img") || []);
     return { nodes: new Set(nodes), ids: new Set(nodes.map(node => node.getAttribute("data-message-id")).filter(Boolean)),
-      imageNodes: new Set(main?.querySelectorAll("img") || []),
+      imageNodes, imageUrls: new Map([...imageNodes].map(img => [img, img.currentSrc || img.src])),
       generatedButtons: new Set(generatedImageButtons(main)) };
   }
-  function assistantImagesAfterPrompt(prompt, snapshot) {
+  function assistantImagesAfterPrompt(prompt, snapshot, seenImageUrls) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
     // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
     const { userMessage } = promptTurn(prompt, snapshot);
     const main = document.querySelector("main");
     if (!main) return [];
     const imgs = resultImages(main);
+    const isFreshImage = img => {
+      const src = img.currentSrc || img.src;
+      return Boolean(src && ( !snapshot.imageNodes.has(img) || snapshot.imageUrls.get(img) !== src) && !seenImageUrls.has(src));
+    };
     // The accessibility tree exposes generated results as a button labelled
     // "Ảnh được tạo 1" even on ChatGPT layouts without message-role attributes.
     const freshResultButtons = generatedImageButtons(main).filter(button =>
       !snapshot.generatedButtons.has(button) && userMessage &&
       Boolean(userMessage.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
-    const buttonImages = freshResultButtons.flatMap(button => resultImages(button));
+    const buttonImages = freshResultButtons.flatMap(button => resultImages(button)).filter(isFreshImage);
     if (buttonImages.length) return buttonImages;
     if (userMessage) {
       const scoped = imgs.filter(img =>
-        !snapshot.imageNodes.has(img) &&
+        isFreshImage(img) &&
         Boolean(userMessage.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING));
       if (scoped.length) return scoped;
     }
 
-    // Only new img elements qualify as fallback. A pre-existing image can finish
-    // lazy-loading after submission and must never be attributed to this prompt.
-    return imgs.filter(img => !snapshot.imageNodes.has(img));
+    return [];
   }
   function resultImages(root = document.querySelector("main")) {
     // Kết quả ảnh của ChatGPT có thể nằm trong wrapper khác nhau giữa các phiên bản UI.
@@ -182,7 +185,10 @@
   async function runOne(message, job, report) {
     if (typeof message.prompt !== "string" || !message.prompt.trim() || message.prompt.length > 10000 ||
         !Number.isInteger(message.index) || message.index < 1 || message.index > 500 ||
-        !Number.isFinite(message.timeout) || message.timeout < 30 || message.timeout > 900) fail("INVALID");
+        !Number.isFinite(message.timeout) || message.timeout < 30 || message.timeout > 900 ||
+        (message.seenImageUrls !== undefined && (!Array.isArray(message.seenImageUrls) || message.seenImageUrls.length > 500 ||
+          message.seenImageUrls.some(url => typeof url !== "string" || url.length > 4096 || !FlowUtils.isChatGPTMediaUrl(url))))) fail("INVALID");
+    const seenImageUrls = new Set(message.seenImageUrls || []);
     const editor = composer();
     const priorUserMessages = userSnapshot();
     report("typing");
@@ -196,14 +202,10 @@
     while (Date.now() < deadline) {
       check(job);
       const isGenerating = generating();
-      const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages)
+      const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages, seenImageUrls)
         .filter(img => (img.currentSrc || img.src) && FlowUtils.isChatGPTMediaUrl(img.currentSrc || img.src));
-      // ChatGPT may expose several URL variants/results in one response. Prefer the
-      // largest newly-added image; on equal dimensions use the last item in DOM order.
-      const selected = freshImages.reduce((best, img) => {
-        const area = img.naturalWidth * img.naturalHeight;
-        return !best || area >= best.naturalWidth * best.naturalHeight ? img : best;
-      }, null);
+      // The newest qualifying image in DOM order belongs to the latest result card.
+      const selected = freshImages[freshImages.length - 1] || null;
       const fresh = selected ? selected.currentSrc || selected.src : "";
       // Ảnh phải là node/nút kết quả mới, sau prompt hiện tại. Dùng chính kết quả
       // mới làm tín hiệu hoàn tất vì trạng thái stop của ChatGPT có thể bị ẩn ở tab nền.

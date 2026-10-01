@@ -127,12 +127,13 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
 });
 test('Worker stops before downloading a repeated ChatGPT image URL', async () => {
-  const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [];
+  const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], seenByPrompt = [], downloads = [];
   const createPort = () => {
     const onMessage = event(), onDisconnect = event();
     return { onMessage, onDisconnect, postMessage(message) {
       if (message.type === 'RUN') {
         promptsSent.push(message.prompt);
+        seenByPrompt.push(message.seenImageUrls || []);
         queueMicrotask(() => onMessage.emit({ type: 'RESULT', id: message.id, ok: true,
           downloadUrl: 'https://chatgpt.com/backend-api/estuary/content?id=same-image', extension: 'png' }));
       }
@@ -154,6 +155,7 @@ test('Worker stops before downloading a repeated ChatGPT image URL', async () =>
   assert.equal(started.ok, true);
   for (let i = 0; i < 50 && stored.queueState?.items?.[1]?.status !== 'error'; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.deepEqual(promptsSent, ['first', 'second']);
+  assert.equal(JSON.stringify(seenByPrompt), JSON.stringify([[], ['https://chatgpt.com/backend-api/estuary/content?id=same-image']]));
   assert.equal(downloads.length, 1);
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'error']);
   assert.match(stored.queueState.items[1].detail, /cùng một URL ảnh/);
