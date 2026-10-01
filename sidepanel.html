@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh &amp; video · v1.5.19</span></div></div></header>
+  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh &amp; video · v1.5.20</span></div></div></header>
   <div id="conn" class="conn conn--off"><span class="dot" aria-hidden="true"></span><span id="connection" role="status">Đang kiểm tra kết nối…</span></div>
   <form id="settings">
     <fieldset id="fields" disabled>
@@ -31,6 +31,11 @@
         <label class="lbl" for="startFrom">Bắt đầu từ prompt số</label>
         <input id="startFrom" type="number" min="1" max="500" step="1" inputmode="numeric" placeholder="Tự tiếp tục" aria-describedby="startFromHint">
         <p id="startFromHint" class="hint">Để trống để tự tiếp tục từ mục chưa hoàn tất. Nhập số bất kỳ để chạy lại từ mục đó; các mục trước sẽ được bỏ qua.</p>
+      </section>
+      <section id="batchBlock" class="block" hidden>
+        <label class="lbl" for="batchEvery">Dừng và chạy lại sau mỗi (prompt)</label>
+        <input id="batchEvery" type="number" min="1" max="500" step="1" value="10" inputmode="numeric" aria-describedby="batchEveryHint">
+        <p id="batchEveryHint" class="hint">Ví dụ 10: dừng ở prompt 10, 20, 30… rồi nghỉ 5–10 giây và chạy lại prompt đó.</p>
       </section>
       <section class="block">
         <label class="lbl" for="filenameBase">Phần thêm cuối tên ảnh</label>

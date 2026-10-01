@@ -55,7 +55,7 @@ test('Giới hạn đầu vào và khoảng chờ', () => {
   assert.equal(U.validate(valid).prompts.length, 2);
   assert.equal(U.validate({ ...valid, startFrom: '2' }).startFrom, 2);
   assert.equal(U.validate({ ...valid, startFrom: '' }).startFrom, null);
-  for (const change of [{ prompts: '' }, { prompts: 'x'.repeat(10001) }, { prompts: 'x\n'.repeat(501) }, { startFrom: '0' }, { startFrom: '3' }, { startFrom: '1.5' }, { startFrom: 'abc' }, { delayMin: -1 }, { delayMin: 10, delayMax: 5 }, { delayMax: Infinity }, { timeout: 29 }, { timeout: 901 }, { mediaType: 'audio' }]) {
+  for (const change of [{ prompts: '' }, { prompts: 'x'.repeat(10001) }, { prompts: 'x\n'.repeat(501) }, { startFrom: '0' }, { startFrom: '3' }, { startFrom: '1.5' }, { startFrom: 'abc' }, { batchEvery: '0' }, { batchEvery: '1.5' }, { batchEvery: '501' }, { delayMin: -1 }, { delayMin: 10, delayMax: 5 }, { delayMax: Infinity }, { timeout: 29 }, { timeout: 901 }, { mediaType: 'audio' }]) {
     assert.throws(() => U.validate({ ...valid, ...change }));
   }
 });
@@ -126,7 +126,7 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
   assert.equal(downloads.length, 2);
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
 });
-test('ChatGPT cancels every tenth send, waits, retries that prompt, and continues', async () => {
+test('ChatGPT uses the chosen interval, waits after cancelling, retries that prompt, and continues', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [], updates = [];
   let imageId = 0;
   const createPort = () => {
@@ -135,7 +135,7 @@ test('ChatGPT cancels every tenth send, waits, retries that prompt, and continue
       postMessage(message) {
         if (message.type === 'RUN') {
           promptsSent.push({ prompt: message.prompt, cancelAfterSend: message.cancelAfterSend });
-          const cancel = message.cancelAfterSend && message.prompt === 'prompt 10';
+          const cancel = message.cancelAfterSend && message.prompt === 'prompt 5';
           queueMicrotask(() => onMessage.emit({ type: 'RESULT', id: message.id, ok: !cancel,
             ...(cancel ? { code: 'GPT_BATCH_CANCELLED' } : {
               downloadUrl: `https://chatgpt.com/backend-api/estuary/content?id=${++imageId}`, extension: 'png' }) }));
@@ -152,8 +152,8 @@ test('ChatGPT cancels every tenth send, waits, retries that prompt, and continue
         search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
     } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
-  const prompts = Array.from({ length: 12 }, (_, index) => `prompt ${index + 1}`).join('\n');
-  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts, delayMin: '0', delayMax: '0' };
+  const prompts = Array.from({ length: 7 }, (_, index) => `prompt ${index + 1}`).join('\n');
+  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts, batchEvery: '5', delayMin: '0', delayMax: '0' };
   const send = () => new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, tabId: 7 },
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   const status = () => new Promise(resolve => onMessage.emit({ type: 'GET_QUEUE_STATUS' },
@@ -162,12 +162,12 @@ test('ChatGPT cancels every tenth send, waits, retries that prompt, and continue
   for (let i = 0; i < 1500 && (await status()).running; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal((await status()).running, false);
   assert.deepEqual(promptsSent.map(run => run.prompt), [
-    ...Array.from({ length: 10 }, (_, index) => `prompt ${index + 1}`), 'prompt 10', 'prompt 11', 'prompt 12'
+    ...Array.from({ length: 5 }, (_, index) => `prompt ${index + 1}`), 'prompt 5', 'prompt 6', 'prompt 7'
   ]);
-  assert.deepEqual(promptsSent.filter(run => run.prompt === 'prompt 10').map(run => run.cancelAfterSend), [true, false]);
-  assert.equal(downloads.length, 12);
+  assert.deepEqual(promptsSent.filter(run => run.prompt === 'prompt 5').map(run => run.cancelAfterSend), [true, false]);
+  assert.equal(downloads.length, 7);
   assert.ok(stored.queueState.items.every(item => item.status === 'done'));
-  assert.match(updates.find(update => /nghỉ \d+ giây/.test(update.status))?.status || '', /prompt 10; nghỉ \d+ giây rồi chạy lại prompt này/i);
+  assert.match(updates.find(update => /nghỉ \d+ giây/.test(update.status))?.status || '', /prompt 5; nghỉ \d+ giây rồi chạy lại prompt này/i);
 });
 test('Worker stops before downloading a repeated ChatGPT image URL', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], seenByPrompt = [], downloads = [];

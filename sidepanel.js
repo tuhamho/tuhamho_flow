@@ -2,7 +2,7 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
 const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
@@ -11,7 +11,7 @@ let saveTail = Promise.resolve();
 function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !text; }
 function settings() {
   return { prompts: ui.prompts.value, folder: ui.folder.value, filenameBase: ui.filenameBase.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
-    startFrom: ui.startFrom.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
+    startFrom: ui.startFrom.value, batchEvery: ui.batchEvery.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
 }
 function queueMatchesCurrent() {
   return Boolean(queueMeta && queueMeta.provider === ui.provider.value && queueMeta.mediaType === ui.mediaType.value &&
@@ -40,13 +40,14 @@ function preview() {
   const chatgpt = ui.provider.value === "chatgpt";
   ui.mediaBlock.hidden = chatgpt;
   ui.mediaType.disabled = chatgpt;
+  ui.batchBlock.hidden = !chatgpt;
   ui.providerHint.textContent = chatgpt
     ? "ChatGPT tạo ảnh qua giao diện web; mỗi tin nhắn có dòng Số thứ tự để bạn đối chiếu. Dòng này có thể ảnh hưởng đôi chút đến cách mô hình hiểu prompt."
     : "Mở dự án Google Flow và chọn đúng tab ở phần tùy chọn.";
   ui.tabLabel.textContent = chatgpt ? "Tab ChatGPT" : "Tab Google Flow";
   ui.flowTab.setAttribute("aria-label", chatgpt ? "Tab ChatGPT cần điều khiển" : "Tab Flow cần điều khiển");
   ui.tip.textContent = chatgpt
-    ? "💡 ChatGPT: cứ sau mỗi 10 prompt, tiện ích tự bấm Dừng, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó để lưu ảnh trước khi tiếp tục. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống."
+    ? `💡 ChatGPT: cứ sau mỗi ${ui.batchEvery.value || 10} prompt, tiện ích tự bấm Dừng, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó để lưu ảnh trước khi tiếp tục. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.`
     : "💡 Chọn đúng tab Google Flow và loại Ảnh/Video; mỗi lượt chỉ tạo 1 kết quả. Có thể đóng panel hoặc chuyển tab sau khi bấm Bắt đầu. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.";
   const sampleExt = video ? ".mp4 hoặc .webm" : ".png, .jpg hoặc .webp";
   const fileStem = video
@@ -207,7 +208,7 @@ ui.clear.addEventListener("click", async () => {
     const data = await chrome.storage.local.get(["settings", "queueState"]);
     const stored = data.settings || {};
     const restored = { ...U.defaults, ...stored };
-    for (const key of ["prompts", "folder", "filenameBase", "startFrom", "delayMin", "delayMax", "timeout"]) {
+    for (const key of ["prompts", "folder", "filenameBase", "startFrom", "batchEvery", "delayMin", "delayMax", "timeout"]) {
       ui[key].value = typeof restored[key] === "string" || typeof restored[key] === "number" ? restored[key] : U.defaults[key];
     }
     ui.serial.checked = typeof restored.serial === "boolean" ? restored.serial : U.defaults.serial;

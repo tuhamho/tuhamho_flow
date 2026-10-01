@@ -2,7 +2,7 @@
 
 // Dùng chung trong panel và kiểm thử, không có thư viện hay mã từ xa.
 globalThis.FlowUtils = (() => {
-  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow" });
+  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", batchEvery: 10, delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow" });
   function isFlowUrl(value) {
     try {
       const url = new URL(value);
@@ -62,6 +62,10 @@ globalThis.FlowUtils = (() => {
     if (startFrom !== null && (!Number.isInteger(startFrom) || startFrom < 1 || startFrom > prompts.length)) {
       throw new Error(`Prompt bắt đầu phải là số nguyên từ 1 đến ${prompts.length}, hoặc để trống để tự tiếp tục.`);
     }
+    const batchEvery = Number(settings.batchEvery ?? defaults.batchEvery);
+    if (!Number.isInteger(batchEvery) || batchEvery < 1 || batchEvery > 500) {
+      throw new Error("Mốc dừng ChatGPT phải là số nguyên từ 1 đến 500.");
+    }
     const min = Number(settings.delayMin), max = Number(settings.delayMax), timeout = Number(settings.timeout);
     if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < min || max > 3600) {
       throw new Error("Khoảng nghỉ phải từ 0 đến 3.600 giây; mức tối đa phải lớn hơn hoặc bằng mức tối thiểu.");
@@ -72,7 +76,7 @@ globalThis.FlowUtils = (() => {
     if (!["image", "video"].includes(settings.mediaType)) throw new Error("Loại kết quả phải là ảnh hoặc video.");
     const provider = settings.provider === "chatgpt" ? "chatgpt" : "flow";
     if (provider === "chatgpt" && settings.mediaType !== "image") throw new Error("ChatGPT hiện chỉ hỗ trợ tạo ảnh.");
-    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
+    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, batchEvery, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
   }
   function imageTitle(prompt, suggested = "") {
     const clean = value => String(value || "").replace(/\s+/g, " ").trim()

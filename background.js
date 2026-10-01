@@ -152,7 +152,7 @@ async function runQueue(run, config, startIndex) {
         (config.timeout + (config.mediaType === "video" ? 120 : 20)) * 1000, run,
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
       };
-      let result = await makeRequest(config.provider === "chatgpt" && (i + 1) % 10 === 0);
+      let result = await makeRequest(config.provider === "chatgpt" && (i + 1) % config.batchEvery === 0);
       check(run);
       if (!result.ok && result.code === "GPT_BATCH_CANCELLED") {
         const cooldown = 5 + Math.floor(Math.random() * 6);
