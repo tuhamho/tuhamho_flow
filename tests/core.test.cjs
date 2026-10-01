@@ -169,7 +169,7 @@ test('ChatGPT uses the chosen interval, waits after cancelling, retries that pro
   assert.ok(stored.queueState.items.every(item => item.status === 'done'));
   assert.match(updates.find(update => /nghỉ \d+ giây/.test(update.status))?.status || '', /prompt 5; nghỉ \d+ giây rồi chạy lại prompt này/i);
 });
-test('Worker retries GPT_NO_BUTTON and GPT_NO_IMAGE on the same prompt after five seconds', async () => {
+test('Worker retries missing-button, missing-image, and timeout results on the same prompt after five seconds', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [];
   const attemptCounts = new Map(); let imageId = 0;
   const createPort = () => {
@@ -179,7 +179,7 @@ test('Worker retries GPT_NO_BUTTON and GPT_NO_IMAGE on the same prompt after fiv
         if (message.type !== 'RUN') return;
         promptsSent.push(message.prompt);
         const attempt = attemptCounts.get(message.prompt) || 0; attemptCounts.set(message.prompt, attempt + 1);
-        const retryCode = attempt === 0 ? (message.prompt === 'prompt 1' ? 'GPT_NO_BUTTON' : 'GPT_NO_IMAGE') : '';
+        const retryCode = attempt === 0 ? ({ 'prompt 1': 'GPT_NO_BUTTON', 'prompt 2': 'GPT_NO_IMAGE', 'prompt 3': 'GPT_TIMEOUT' })[message.prompt] : '';
         queueMicrotask(() => onMessage.emit({ type: 'RESULT', id: message.id, ok: !retryCode,
           ...(retryCode ? { code: retryCode } : {
             downloadUrl: `https://chatgpt.com/backend-api/estuary/content?id=retry-${++imageId}`, extension: 'png' }) }));
@@ -195,14 +195,14 @@ test('Worker retries GPT_NO_BUTTON and GPT_NO_IMAGE on the same prompt after fiv
         search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
     } };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
-  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts: 'prompt 1\nprompt 2', batchEvery: '50', delayMin: '0', delayMax: '0' };
+  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts: 'prompt 1\nprompt 2\nprompt 3', batchEvery: '50', delayMin: '0', delayMax: '0' };
   const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, tabId: 7 },
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(started.ok, true);
-  for (let i = 0; i < 1600 && stored.queueState?.items?.filter(item => item.status === 'done').length !== 2; i++) await new Promise(resolve => setTimeout(resolve, 10));
-  assert.deepEqual(promptsSent, ['prompt 1', 'prompt 1', 'prompt 2', 'prompt 2']);
-  assert.equal(downloads.length, 2);
-  assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'done']);
+  for (let i = 0; i < 2500 && stored.queueState?.items?.filter(item => item.status === 'done').length !== 3; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(promptsSent, ['prompt 1', 'prompt 1', 'prompt 2', 'prompt 2', 'prompt 3', 'prompt 3']);
+  assert.equal(downloads.length, 3);
+  assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'done', 'done']);
 });
 test('Worker stops before downloading a repeated ChatGPT image URL', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], seenByPrompt = [], downloads = [];

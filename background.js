@@ -64,7 +64,11 @@ function request(port, message, match, timeoutMs, run, phase) {
     };
     const disconnect = () => { void chrome.runtime.lastError; finish(new Error("Mất kết nối với tab dịch vụ.")); };
     const abort = () => finish(new Error(run.reason || "Đã dừng."));
-    const timer = setTimeout(() => finish(new Error("Hết thời gian chờ phản hồi của tab.")), timeoutMs);
+    const timer = setTimeout(() => {
+      const error = new Error("Hết thời gian chờ phản hồi của tab.");
+      error.code = message.type === "RUN" && message.provider === "chatgpt" ? "GPT_TIMEOUT" : "TIMEOUT";
+      finish(error);
+    }, timeoutMs);
     port.onMessage.addListener(receive); port.onDisconnect.addListener(disconnect);
     run.controller.signal.addEventListener("abort", abort, { once: true });
     try { port.postMessage(message); } catch { disconnect(); }
@@ -146,31 +150,45 @@ async function runQueue(run, config, startIndex) {
       item.status = "typing"; item.detail = ""; run.status = `Đang nhập prompt ${i + 1} / ${run.items.length}…`; publish(run);
       const makeRequest = cancelAfterSend => {
         const id = crypto.randomUUID();
-        return request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType, cancelAfterSend,
+        return request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType, provider: config.provider, cancelAfterSend,
         ...(config.provider === "chatgpt" ? { seenImageUrls: [...run.seenImageUrls] } : {}) },
         value => value?.type === "RESULT" && value.id === id,
         (config.timeout + (config.mediaType === "video" ? 120 : 20)) * 1000, run,
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
       };
       const cancelAtBoundary = config.provider === "chatgpt" && (i + 1) % config.batchEvery === 0;
-      let result = await makeRequest(cancelAtBoundary);
+      let result;
+      try { result = await makeRequest(cancelAtBoundary); }
+      catch (error) {
+        if (!(["GPT_TIMEOUT", "TIMEOUT"].includes(error.code))) throw error;
+        result = { ok: false, code: error.code };
+      }
       check(run);
-      while (!result.ok && ["GPT_NO_BUTTON", "GPT_NO_IMAGE"].includes(result.code)) {
+      while (!result.ok && ["GPT_NO_BUTTON", "GPT_NO_IMAGE", "GPT_TIMEOUT", "TIMEOUT"].includes(result.code)) {
         const waitingForImage = result.code === "GPT_NO_IMAGE";
+        const timedOut = ["GPT_TIMEOUT", "TIMEOUT"].includes(result.code);
         item.status = "typing";
         item.detail = waitingForImage
           ? "ChatGPT chưa trả ảnh; sẽ gửi lại prompt này sau 5 giây."
-          : "Chưa tìm thấy nút Gửi; sẽ thử lại sau 5 giây.";
+          : timedOut ? "Đã hết thời gian chờ; sẽ thử lại cùng prompt sau 5 giây."
+            : "Chưa tìm thấy nút Gửi; sẽ thử lại sau 5 giây.";
         run.status = waitingForImage
           ? `ChatGPT chưa trả ảnh ở prompt ${i + 1}; thử lại sau 5 giây…`
-          : `Chưa tìm thấy nút Gửi ở prompt ${i + 1}; thử lại sau 5 giây…`;
+          : timedOut ? `Hết thời gian chờ prompt ${i + 1}; thử lại sau 5 giây…`
+            : `Chưa tìm thấy nút Gửi ở prompt ${i + 1}; thử lại sau 5 giây…`;
         publish(run);
         await sleep(5000, run);
         check(run);
-        item.detail = waitingForImage ? "Đang gửi lại prompt chưa có ảnh." : "Đang thử lại cùng prompt.";
+        item.detail = waitingForImage ? "Đang gửi lại prompt chưa có ảnh."
+          : timedOut ? "Đang chạy lại prompt hết thời gian chờ."
+            : "Đang thử lại cùng prompt.";
         run.status = `Đang thử lại prompt ${i + 1}…`;
         publish(run);
-        result = await makeRequest(cancelAtBoundary);
+        try { result = await makeRequest(cancelAtBoundary); }
+        catch (error) {
+          if (!(["GPT_TIMEOUT", "TIMEOUT"].includes(error.code))) throw error;
+          result = { ok: false, code: error.code };
+        }
         check(run);
       }
       if (!result.ok && result.code === "GPT_BATCH_CANCELLED") {
