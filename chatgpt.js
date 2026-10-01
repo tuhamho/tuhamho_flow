@@ -102,15 +102,19 @@
       return /(?:ảnh\s+(?:được|đã)\s+tạo|image\s+(?:generated|created)|(?:generated|created)\s+image)/i.test(label);
     });
   }
-  function promptTurn(prompt, snapshot) {
+  function promptTurn(prompt, snapshot, index) {
     const currentMessages = userMessages();
     const isNewMessage = node => {
       const id = node.getAttribute("data-message-id");
       return id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
     };
     const newMessages = currentMessages.filter(isNewMessage);
-    const expected = normalizeText(prompt);
-    const userMessage = [...newMessages].reverse().find(node => {
+    // Dòng số thứ tự do extension thêm vào là dấu mốc ngắn, ổn định hơn prompt:
+    // ChatGPT có thể chuẩn hóa hoặc cắt bớt phần văn bản dài khi dựng lại tin nhắn.
+    const marker = Number.isInteger(index) ? normalizeText(`Số thứ tự: ${index}.`) : "";
+    const userMessage = (marker ? [...newMessages].reverse().find(node =>
+      normalizeText(node.innerText).includes(marker)) : null) || [...newMessages].reverse().find(node => {
+      const expected = normalizeText(prompt);
       const actual = normalizeText(node.innerText);
       const promptPrefix = expected.slice(0, Math.min(120, expected.length));
       return actual.includes(expected) || actual.includes(promptPrefix);
@@ -118,8 +122,8 @@
     const userIndex = userMessage ? currentMessages.indexOf(userMessage) : -1;
     return { userMessage, nextUserMessage: userIndex >= 0 ? currentMessages[userIndex + 1] || null : null };
   }
-  function generatedVariantCount(prompt, snapshot) {
-    const { userMessage, nextUserMessage } = promptTurn(prompt, snapshot);
+  function generatedVariantCount(prompt, snapshot, index) {
+    const { userMessage, nextUserMessage } = promptTurn(prompt, snapshot, index);
     if (!userMessage) return 0;
     const controls = [...document.querySelectorAll('main button[aria-label],main [role="button"][aria-label]')]
       .filter(button => {
@@ -139,10 +143,10 @@
       imageNodes, imageUrls: new Map([...imageNodes].map(img => [img, img.currentSrc || img.src])),
       generatedButtons: new Set(generatedImageButtons(main)) };
   }
-  function assistantImagesAfterPrompt(prompt, snapshot, seenImageUrls) {
+  function assistantImagesAfterPrompt(prompt, snapshot, seenImageUrls, index) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
     // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
-    const { userMessage } = promptTurn(prompt, snapshot);
+    const { userMessage } = promptTurn(prompt, snapshot, index);
     const main = document.querySelector("main");
     if (!main) return [];
     const imgs = resultImages(main);
@@ -202,7 +206,7 @@
     while (Date.now() < deadline) {
       check(job);
       const isGenerating = generating();
-      const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages, seenImageUrls)
+      const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages, seenImageUrls, message.index)
         .filter(img => (img.currentSrc || img.src) && FlowUtils.isChatGPTMediaUrl(img.currentSrc || img.src));
       // The newest qualifying image in DOM order belongs to the latest result card.
       const selected = freshImages[freshImages.length - 1] || null;
@@ -212,7 +216,7 @@
       if (fresh && !isGenerating) {
         if (candidate !== fresh) { candidate = fresh; stableSince = Date.now(); }
         if (Date.now() - stableSince >= 1800) {
-          if (generatedVariantCount(message.prompt, priorUserMessages) > 1) fail("GPT_MULTIPLE_IMAGES");
+          if (generatedVariantCount(message.prompt, priorUserMessages, message.index) > 1) fail("GPT_MULTIPLE_IMAGES");
           let url;
           try { url = new URL(candidate, location.href); } catch { fail("GPT_IMAGE_URL"); }
           if (!FlowUtils.isChatGPTMediaUrl(url.href)) fail("GPT_IMAGE_URL");

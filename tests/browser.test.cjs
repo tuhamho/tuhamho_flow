@@ -100,6 +100,12 @@ async function chatgptPage(mode = 'success') {
         const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
         userMessage.textContent = input.value; document.querySelector('main').append(userMessage);
       }
+      if (mode === 'marker-priority') {
+        const priorLikeMessage = document.createElement('div'); priorLikeMessage.setAttribute('data-message-author-role', 'user');
+        priorLikeMessage.textContent = 'Số thứ tự: 6. Nội dung đã được giao diện dựng lại'; document.querySelector('main').append(priorLikeMessage);
+        const markedMessage = document.createElement('div'); markedMessage.setAttribute('data-message-author-role', 'user');
+        markedMessage.textContent = 'Số thứ tự: 7. Nội dung đã được giao diện dựng lại'; document.querySelector('main').append(markedMessage);
+      }
       const stop = document.createElement('button'); stop.dataset.testid = 'stop-button'; stop.setAttribute('aria-label', 'Stop generating');
       document.querySelector('main').append(stop); setTimeout(() => stop.remove(), 100);
       if (mode === 'late-old-image') {
@@ -199,7 +205,7 @@ async function panelPage() {
   browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', headless: true });
   await check('ChatGPT: gửi prompt một lần, nhận URL ảnh mới từ câu trả lời', async () => {
     const page = await chatgptPage();
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.equal(response.extension, 'png'); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//);
@@ -207,56 +213,63 @@ async function panelPage() {
   });
   await check('ChatGPT: chấp nhận xuống dòng được hiển thị thành khoảng trắng trong composer', async () => {
     const page = await chatgptPage('formatted');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-formatted', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-formatted', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); await page.close();
   });
   await check('ChatGPT: tiếp tục chờ ảnh sau khi tạo chat mới đổi URL nội bộ', async () => {
     const page = await chatgptPage('navigate');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-nav', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-nav', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(await page.evaluate(() => location.pathname), /^\/c\/local-chatgpt/); await page.close();
   });
   await check('ChatGPT: vẫn nhận ảnh mới khi giao diện biến đổi nội dung tin nhắn user', async () => {
     const page = await chatgptPage('mismatch');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-mismatch', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-mismatch', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: ghép ảnh theo số thứ tự khi nội dung user bị dựng lại', async () => {
+    const page = await chatgptPage('marker-priority');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-marker', index: 7, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
   await check('ChatGPT: nhận ảnh mới khi giao diện bỏ thuộc tính role của tin nhắn', async () => {
     const page = await chatgptPage('missing-roles');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-no-roles', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-no-roles', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
   await check('ChatGPT: dùng đúng nút ảnh kết quả vừa thêm', async () => {
     const page = await chatgptPage('generated-button');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-button', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-button', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
   await check('ChatGPT: dừng thay vì tải nhầm khi một lượt có hai ảnh biến thể', async () => {
     const page = await chatgptPage('multiple-variants');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-two-variants', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-two-variants', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, false); assert.equal(response.code, 'GPT_MULTIPLE_IMAGES'); await page.close();
   });
   await check('ChatGPT: chọn ảnh mới có độ phân giải cao nhất khi một phản hồi có nhiều ảnh', async () => {
     const page = await chatgptPage('multiple-images');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-multiple', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-multiple', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /id=fresh-1\.png/); await page.close();
   });
   await check('ChatGPT: không lấy ảnh lịch sử vừa lazy-load làm ảnh prompt hiện tại', async () => {
     const page = await chatgptPage('late-old-image');
-    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-old-lazy', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-old-lazy', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.sent === 1);
     await page.waitForTimeout(2300);
     assert.equal(await page.evaluate(() => window.results.some(item => item.type === 'RESULT')), false);
