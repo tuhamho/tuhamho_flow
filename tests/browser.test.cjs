@@ -127,6 +127,12 @@ async function chatgptPage(mode = 'success') {
         } else message.append(img);
         document.querySelector('main').append(message);
       }
+      if (mode === 'multiple-variants') {
+        for (let i = 1; i <= 2; i++) {
+          const variant = document.createElement('button'); variant.setAttribute('aria-label', `Hiển thị ảnh đã tạo ${i}`);
+          document.querySelector('main').append(variant);
+        }
+      }
     });
   }, { mode });
   await page.addScriptTag({ path: path.join(root, 'shared.js') });
@@ -233,6 +239,13 @@ async function panelPage() {
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: dừng thay vì tải nhầm khi một lượt có hai ảnh biến thể', async () => {
+    const page = await chatgptPage('multiple-variants');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-two-variants', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, false); assert.equal(response.code, 'GPT_MULTIPLE_IMAGES'); await page.close();
   });
   await check('ChatGPT: chọn ảnh mới có độ phân giải cao nhất khi một phản hồi có nhiều ảnh', async () => {
     const page = await chatgptPage('multiple-images');

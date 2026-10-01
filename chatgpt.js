@@ -102,6 +102,35 @@
       return /(?:ảnh\s+(?:được|đã)\s+tạo|image\s+(?:generated|created)|(?:generated|created)\s+image)/i.test(label);
     });
   }
+  function promptTurn(prompt, snapshot) {
+    const currentMessages = userMessages();
+    const isNewMessage = node => {
+      const id = node.getAttribute("data-message-id");
+      return id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
+    };
+    const newMessages = currentMessages.filter(isNewMessage);
+    const expected = normalizeText(prompt);
+    const userMessage = [...newMessages].reverse().find(node => {
+      const actual = normalizeText(node.innerText);
+      const promptPrefix = expected.slice(0, Math.min(120, expected.length));
+      return actual.includes(expected) || actual.includes(promptPrefix);
+    }) || (newMessages.length === 1 ? newMessages[0] : null);
+    const userIndex = userMessage ? currentMessages.indexOf(userMessage) : -1;
+    return { userMessage, nextUserMessage: userIndex >= 0 ? currentMessages[userIndex + 1] || null : null };
+  }
+  function generatedVariantCount(prompt, snapshot) {
+    const { userMessage, nextUserMessage } = promptTurn(prompt, snapshot);
+    if (!userMessage) return 0;
+    const controls = [...document.querySelectorAll('main button[aria-label],main [role="button"][aria-label]')]
+      .filter(button => {
+        const label = normalizeText(button.getAttribute("aria-label"));
+        return /^(?:hiển thị ảnh đã tạo|show generated image)\s*\d+$/i.test(label) &&
+          Boolean(userMessage.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+          (!nextUserMessage || Boolean(button.compareDocumentPosition(nextUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING));
+      });
+    const indexes = new Set(controls.map(button => Number(/\d+$/.exec(button.getAttribute("aria-label"))?.[0])).filter(Number.isInteger));
+    return indexes.size;
+  }
   function userSnapshot() {
     const nodes = userMessages();
     const main = document.querySelector("main");
@@ -112,18 +141,7 @@
   function assistantImagesAfterPrompt(prompt, snapshot) {
     // Ghép ảnh với đúng tin nhắn mới gửi. Chỉ xét các ảnh nằm sau tin nhắn đó
     // trong main; ảnh lịch sử ở phía trên có thể lazy-load muộn nhưng bị loại.
-    const expected = normalizeText(prompt);
-    const currentMessages = userMessages();
-    const isNewMessage = node => {
-      const id = node.getAttribute("data-message-id");
-      return id ? !snapshot.ids.has(id) : !snapshot.nodes.has(node);
-    };
-    const newMessages = currentMessages.filter(isNewMessage);
-    const userMessage = [...newMessages].reverse().find(node => {
-      const actual = normalizeText(node.innerText);
-      const promptPrefix = expected.slice(0, Math.min(120, expected.length));
-      return actual.includes(expected) || actual.includes(promptPrefix);
-    }) || (newMessages.length === 1 ? newMessages[0] : null);
+    const { userMessage } = promptTurn(prompt, snapshot);
     const main = document.querySelector("main");
     if (!main) return [];
     const imgs = resultImages(main);
@@ -174,11 +192,10 @@
     sendButton().click(); // Một lần gửi theo thao tác Bắt đầu của người dùng.
     report("generating");
     const deadline = Date.now() + message.timeout * 1000;
-    let candidate = "", stableSince = 0, sawGeneration = false;
+    let candidate = "", stableSince = 0;
     while (Date.now() < deadline) {
       check(job);
       const isGenerating = generating();
-      if (isGenerating) sawGeneration = true;
       const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages)
         .filter(img => (img.currentSrc || img.src) && FlowUtils.isChatGPTMediaUrl(img.currentSrc || img.src));
       // ChatGPT may expose several URL variants/results in one response. Prefer the
@@ -188,11 +205,12 @@
         return !best || area >= best.naturalWidth * best.naturalHeight ? img : best;
       }, null);
       const fresh = selected ? selected.currentSrc || selected.src : "";
-      // Chỉ chấp nhận ảnh sau khi đã quan sát lượt tạo hiện tại chạy và kết thúc.
-      // Nếu ảnh lịch sử tải trễ hoặc nút kết quả cũ được render lại, không tiến hàng đợi.
-      if (fresh && sawGeneration && !isGenerating) {
+      // Ảnh phải là node/nút kết quả mới, sau prompt hiện tại. Dùng chính kết quả
+      // mới làm tín hiệu hoàn tất vì trạng thái stop của ChatGPT có thể bị ẩn ở tab nền.
+      if (fresh && !isGenerating) {
         if (candidate !== fresh) { candidate = fresh; stableSince = Date.now(); }
         if (Date.now() - stableSince >= 1800) {
+          if (generatedVariantCount(message.prompt, priorUserMessages) > 1) fail("GPT_MULTIPLE_IMAGES");
           let url;
           try { url = new URL(candidate, location.href); } catch { fail("GPT_IMAGE_URL"); }
           if (!FlowUtils.isChatGPTMediaUrl(url.href)) fail("GPT_IMAGE_URL");
