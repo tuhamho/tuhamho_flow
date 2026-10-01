@@ -85,10 +85,29 @@ async function chatgptPage(mode = 'success') {
     if (mode === 'formatted') {
       const editor = document.createElement('div'); editor.id = 'prompt-textarea'; editor.contentEditable = 'true'; editor.style.cssText = 'width:400px;height:100px'; input.replaceWith(editor); input = editor;
     }
+    if (mode === 'late-old-image') {
+      const stale = document.createElement('img'); stale.id = 'old-delayed'; stale.style.cssText = 'width:300px;height:300px';
+      stale.src = 'https://chatgpt.com/old-lazy-image.png';
+      Object.defineProperty(stale, 'currentSrc', { get: () => stale.dataset.ready ? 'https://chatgpt.com/backend-api/estuary/content?id=old.png' : '' });
+      document.querySelector('main').append(stale);
+    }
     const button = document.querySelector('button');
     input.addEventListener('input', () => { button.disabled = false; });
     button.addEventListener('click', () => {
+      window.sent = (window.sent || 0) + 1;
       if (mode === 'navigate') history.pushState({}, '', '/c/local-chatgpt%3Agenerated');
+      if (mode !== 'mismatch') {
+        const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
+        userMessage.textContent = input.value; document.querySelector('main').append(userMessage);
+      }
+      const stop = document.createElement('button'); stop.dataset.testid = 'stop-button'; stop.setAttribute('aria-label', 'Stop generating');
+      document.querySelector('main').append(stop); setTimeout(() => stop.remove(), 100);
+      if (mode === 'late-old-image') {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+        canvas.getContext('2d').fillRect(0, 0, 512, 512);
+        const stale = document.querySelector('#old-delayed'); stale.dataset.ready = 'yes'; stale.src = canvas.toDataURL();
+        return;
+      }
       if (mode === 'mismatch') {
         const userMessage = document.createElement('div'); userMessage.setAttribute('data-message-author-role', 'user');
         userMessage.textContent = 'Nội dung đã được giao diện chuyển đổi'; document.querySelector('main').append(userMessage);
@@ -101,8 +120,12 @@ async function chatgptPage(mode = 'success') {
         Object.defineProperty(img, 'currentSrc', { get: () => mode === 'evil' ? 'https://example.test/image.png' :
           `https://chatgpt.com/backend-api/estuary/content?id=fresh-${mode === 'multiple-images' ? i : ''}.png` });
         const message = document.createElement('div');
-        if (mode !== 'missing-roles') message.setAttribute('data-message-author-role', 'assistant');
-        message.append(img); document.querySelector('main').append(message);
+        if (mode !== 'missing-roles' && mode !== 'generated-button') message.setAttribute('data-message-author-role', 'assistant');
+        if (mode === 'generated-button') {
+          const resultButton = document.createElement('button'); resultButton.setAttribute('aria-label', 'Ảnh được tạo 1');
+          resultButton.append(img); message.append(resultButton);
+        } else message.append(img);
+        document.querySelector('main').append(message);
       }
     });
   }, { mode });
@@ -204,12 +227,28 @@ async function panelPage() {
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
+  await check('ChatGPT: dùng đúng nút ảnh kết quả vừa thêm', async () => {
+    const page = await chatgptPage('generated-button');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-button', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
+    const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
+    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
   await check('ChatGPT: chọn ảnh mới có độ phân giải cao nhất khi một phản hồi có nhiều ảnh', async () => {
     const page = await chatgptPage('multiple-images');
     await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-multiple', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.match(response.downloadUrl, /id=fresh-1\.png/); await page.close();
+  });
+  await check('ChatGPT: không lấy ảnh lịch sử vừa lazy-load làm ảnh prompt hiện tại', async () => {
+    const page = await chatgptPage('late-old-image');
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-old-lazy', prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
+    await page.waitForFunction(() => window.sent === 1);
+    await page.waitForTimeout(2300);
+    assert.equal(await page.evaluate(() => window.results.some(item => item.type === 'RESULT')), false);
+    await page.evaluate(() => port.onMessage.emit({ type: 'STOP' }));
+    assert.equal((await result(page)).code, 'STOPPED'); await page.close();
   });
   await check('DOM textarea → một click → PNG', async () => {
     const page = await contentPage(); await runContent(page); const response = await result(page);
