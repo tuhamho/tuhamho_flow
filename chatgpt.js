@@ -196,9 +196,14 @@
       '[data-testid*="stop" i],[data-testid*="cancel" i],button[aria-label],button[title]'
     )];
     return candidates.find(element => {
-      const label = [element.getAttribute("data-testid"), element.getAttribute("aria-label"),
-        element.getAttribute("title")].filter(Boolean).join(" ");
-      if (!/(?:stop|cancel|interrupt|dừng|dung|hủy|huy|ngừng|ngung)/i.test(label)) return false;
+      const testId = normalizeText(element.getAttribute("data-testid"));
+      const label = normalizeText([element.getAttribute("aria-label"), element.getAttribute("title")]
+        .filter(Boolean).join(" ")).toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      // Avoid treating unrelated controls like “Cancel edit” or “Stopwatch”
+      // as a live generation signal; that would block normal image downloads.
+      const explicitTestId = /(?:^|[-_])(?:stop|cancel|interrupt)(?:[-_]|$)/i.test(testId);
+      const explicitLabel = /^(?:stop|stop generating|stop response|stop streaming|cancel generation|cancel response|interrupt|interrupt generation|interrupt response|dung|dung tao|dung phan hoi|ngung|ngung tao|ngung phan hoi|huy tao|huy phan hoi)$/i.test(label);
+      if (!explicitTestId && !explicitLabel) return false;
       if (!element.isConnected || element.closest('[hidden],[aria-hidden="true"],[inert]')) return false;
       const style = getComputedStyle(element);
       return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0 &&

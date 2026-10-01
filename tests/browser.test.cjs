@@ -235,7 +235,19 @@ async function panelPage() {
     await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-mismatch', index: 1, prompt: 'Một chú mèo màu xanh', timeout: 30, mediaType: 'image' }));
     await page.waitForFunction(() => window.results?.some(item => item.type === 'RESULT'));
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
-    assert.equal(response.ok, true); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+    assert.equal(response.ok, true, JSON.stringify(response)); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
+  });
+  await check('ChatGPT: nút hủy giao diện khác không chặn tải ảnh', async () => {
+    const page = await chatgptPage('normal');
+    await page.evaluate(() => {
+      const unrelated = document.createElement('button');
+      unrelated.setAttribute('aria-label', 'Hủy chỉnh sửa');
+      unrelated.setAttribute('title', 'Cancel edit');
+      document.querySelector('main').append(unrelated);
+    });
+    await page.evaluate(() => port.onMessage.emit({ type: 'RUN', id: 'gpt-unrelated-cancel', index: 1, prompt: 'Một khu vườn an toàn', timeout: 30, mediaType: 'image' }));
+    const response = await result(page);
+    assert.equal(response.ok, true, JSON.stringify(response)); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//); await page.close();
   });
   await check('ChatGPT: ghép ảnh theo số thứ tự khi nội dung user bị dựng lại', async () => {
     const page = await chatgptPage('marker-priority');
