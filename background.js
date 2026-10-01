@@ -152,8 +152,22 @@ async function runQueue(run, config, startIndex) {
         (config.timeout + (config.mediaType === "video" ? 120 : 20)) * 1000, run,
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
       };
-      let result = await makeRequest(config.provider === "chatgpt" && (i + 1) % config.batchEvery === 0);
+      const cancelAtBoundary = config.provider === "chatgpt" && (i + 1) % config.batchEvery === 0;
+      let result = await makeRequest(cancelAtBoundary);
       check(run);
+      while (!result.ok && result.code === "GPT_NO_BUTTON") {
+        item.status = "typing";
+        item.detail = "Chưa tìm thấy nút Gửi; sẽ thử lại sau 5 giây.";
+        run.status = `Chưa tìm thấy nút Gửi ở prompt ${i + 1}; thử lại sau 5 giây…`;
+        publish(run);
+        await sleep(5000, run);
+        check(run);
+        item.detail = "Đang thử lại cùng prompt.";
+        run.status = `Đang thử lại prompt ${i + 1}…`;
+        publish(run);
+        result = await makeRequest(cancelAtBoundary);
+        check(run);
+      }
       if (!result.ok && result.code === "GPT_BATCH_CANCELLED") {
         const cooldown = 5 + Math.floor(Math.random() * 6);
         item.status = "stopped";
