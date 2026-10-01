@@ -46,7 +46,7 @@ function preview() {
   ui.tabLabel.textContent = chatgpt ? "Tab ChatGPT" : "Tab Google Flow";
   ui.flowTab.setAttribute("aria-label", chatgpt ? "Tab ChatGPT cần điều khiển" : "Tab Flow cần điều khiển");
   ui.tip.textContent = chatgpt
-    ? "💡 Mở chatgpt.com, đăng nhập và chọn chế độ có thể tạo ảnh. Tiện ích gửi prompt theo thứ tự, chờ ảnh mới rồi tự tải. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống."
+    ? "💡 ChatGPT: cứ sau mỗi 10 prompt, tiện ích tự bấm Dừng, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó để lưu ảnh trước khi tiếp tục. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống."
     : "💡 Chọn đúng tab Google Flow và loại Ảnh/Video; mỗi lượt chỉ tạo 1 kết quả. Có thể đóng panel hoặc chuyển tab sau khi bấm Bắt đầu. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.";
   const sampleExt = video ? ".mp4 hoặc .webm" : ".png, .jpg hoặc .webp";
   const fileStem = video

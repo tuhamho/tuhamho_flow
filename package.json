@@ -1,0 +1,12 @@
+{
+  "name": "tuhamho-flow-extension-tests",
+  "version": "1.5.19",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/core.test.cjs",
+    "test:browser": "node --test tests/browser.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

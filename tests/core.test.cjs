@@ -126,6 +126,49 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
   assert.equal(downloads.length, 2);
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
 });
+test('ChatGPT cancels every tenth send, waits, retries that prompt, and continues', async () => {
+  const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [], updates = [];
+  let imageId = 0;
+  const createPort = () => {
+    const onMessage = event(), onDisconnect = event();
+    return { name: 'chatgpt-batch-work', onMessage, onDisconnect,
+      postMessage(message) {
+        if (message.type === 'RUN') {
+          promptsSent.push({ prompt: message.prompt, cancelAfterSend: message.cancelAfterSend });
+          const cancel = message.cancelAfterSend && message.prompt === 'prompt 10';
+          queueMicrotask(() => onMessage.emit({ type: 'RESULT', id: message.id, ok: !cancel,
+            ...(cancel ? { code: 'GPT_BATCH_CANCELLED' } : {
+              downloadUrl: `https://chatgpt.com/backend-api/estuary/content?id=${++imageId}`, extension: 'png' }) }));
+        }
+      }, disconnect() { onDisconnect.emit(); } };
+  };
+  const context = { FlowUtils: U, importScripts() {}, crypto: require('node:crypto').webcrypto, AbortController,
+    setTimeout, clearTimeout, setInterval, clearInterval, chrome: {
+      runtime: { id: 'test', getURL: file => `chrome-extension://test/${file}`, onMessage, onInstalled: event(), sendMessage: async message => updates.push(message) },
+      sidePanel: { setPanelBehavior: async () => {} },
+      storage: { local: { setAccessLevel: async () => {}, get: async () => ({ queueState: stored.queueState }), set: async value => Object.assign(stored, value) } },
+      tabs: { get: async () => ({ url: 'https://chatgpt.com/c/test' }), sendMessage: async () => ({ ok: true }), connect: createPort },
+      downloads: { onChanged: downloadChanged, download: async options => { downloads.push(options); return downloads.length; },
+        search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
+    } };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
+  const prompts = Array.from({ length: 12 }, (_, index) => `prompt ${index + 1}`).join('\n');
+  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts, delayMin: '0', delayMax: '0' };
+  const send = () => new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, tabId: 7 },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
+  const status = () => new Promise(resolve => onMessage.emit({ type: 'GET_QUEUE_STATUS' },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
+  assert.equal((await send()).ok, true);
+  for (let i = 0; i < 1500 && (await status()).running; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal((await status()).running, false);
+  assert.deepEqual(promptsSent.map(run => run.prompt), [
+    ...Array.from({ length: 10 }, (_, index) => `prompt ${index + 1}`), 'prompt 10', 'prompt 11', 'prompt 12'
+  ]);
+  assert.deepEqual(promptsSent.filter(run => run.prompt === 'prompt 10').map(run => run.cancelAfterSend), [true, false]);
+  assert.equal(downloads.length, 12);
+  assert.ok(stored.queueState.items.every(item => item.status === 'done'));
+  assert.match(updates.find(update => /nghỉ \d+ giây/.test(update.status))?.status || '', /prompt 10; nghỉ \d+ giây rồi chạy lại prompt này/i);
+});
 test('Worker stops before downloading a repeated ChatGPT image URL', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], seenByPrompt = [], downloads = [];
   const createPort = () => {

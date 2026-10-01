@@ -189,13 +189,15 @@
       return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
     });
   }
-  function generating() {
-    const stop = document.querySelector('[data-testid="stop-button"],button[aria-label*="Stop generating" i]');
-    return visible(stop);
+  function stopGeneratingButton() {
+    return [...document.querySelectorAll('[data-testid="stop-button"],button[aria-label*="Stop generating" i],button[aria-label*="Dừng tạo" i]')]
+      .find(visible) || null;
   }
+  function generating() { return Boolean(stopGeneratingButton()); }
   async function runOne(message, job, report) {
     if (typeof message.prompt !== "string" || !message.prompt.trim() || message.prompt.length > 10000 ||
         !Number.isInteger(message.index) || message.index < 1 || message.index > 500 ||
+        (message.cancelAfterSend !== undefined && typeof message.cancelAfterSend !== "boolean") ||
         !Number.isFinite(message.timeout) || message.timeout < 30 || message.timeout > 900 ||
         (message.seenImageUrls !== undefined && (!Array.isArray(message.seenImageUrls) || message.seenImageUrls.length > 500 ||
           message.seenImageUrls.some(url => typeof url !== "string" || url.length > 4096 || !FlowUtils.isChatGPTMediaUrl(url))))) fail("INVALID");
@@ -209,10 +211,20 @@
     sendButton().click(); // Một lần gửi theo thao tác Bắt đầu của người dùng.
     report("generating");
     const deadline = Date.now() + message.timeout * 1000;
-    let candidate = "", stableSince = 0;
+    let candidate = "", stableSince = 0, sawGenerating = false, stoppedWithoutImageSince = 0, batchCancelRequested = false;
     while (Date.now() < deadline) {
       check(job);
       const isGenerating = generating();
+      if (isGenerating) { sawGenerating = true; stoppedWithoutImageSince = 0; }
+      if (message.cancelAfterSend && sawGenerating && !batchCancelRequested) {
+        const stop = stopGeneratingButton();
+        if (stop) { stop.click(); batchCancelRequested = true; }
+      }
+      if (batchCancelRequested) {
+        if (!isGenerating) fail("GPT_BATCH_CANCELLED");
+        await waitForPageChange(300, job);
+        continue;
+      }
       const freshImages = assistantImagesAfterPrompt(message.prompt, priorUserMessages, seenImageUrls, message.index)
         .filter(img => (img.currentSrc || img.src) && FlowUtils.isChatGPTMediaUrl(img.currentSrc || img.src));
       // The newest qualifying image in DOM order belongs to the latest result card.
@@ -221,6 +233,7 @@
       // Ảnh phải là node/nút kết quả mới, sau prompt hiện tại. Dùng chính kết quả
       // mới làm tín hiệu hoàn tất vì trạng thái stop của ChatGPT có thể bị ẩn ở tab nền.
       if (fresh && !isGenerating) {
+        stoppedWithoutImageSince = 0;
         if (candidate !== fresh) { candidate = fresh; stableSince = Date.now(); }
         if (Date.now() - stableSince >= 1800) {
           if (generatedVariantCount(message.prompt, priorUserMessages, message.index) > 1) fail("GPT_MULTIPLE_IMAGES");
@@ -234,7 +247,15 @@
               !/^(?:ảnh|image|ảnh được tạo|generated image|created image)(?:\s*\d+)?$/i.test(value)) || "";
           return { downloadUrl: url.href, extension: ext === "jpeg" ? "jpg" : ext, imageName };
         }
-      } else { candidate = ""; stableSince = 0; }
+      } else {
+        candidate = ""; stableSince = 0;
+        // Người dùng có thể bấm nút Dừng của ChatGPT khi ảnh chưa xong. Báo
+        // sớm để hàng đợi giữ vị trí này; bấm Tiếp tục sẽ thử lại đúng prompt đó.
+        if (sawGenerating && !isGenerating) {
+          if (!stoppedWithoutImageSince) stoppedWithoutImageSince = Date.now();
+          if (Date.now() - stoppedWithoutImageSince >= 3500) fail("GPT_NO_IMAGE");
+        }
+      }
       await waitForPageChange(1200, job);
     }
     fail("GPT_TIMEOUT");

@@ -76,6 +76,8 @@ function queueError(code) {
     INPUT_REJECTED: "Trang chưa nhận đúng prompt; chưa gửi yêu cầu.", NO_BUTTON: "Không tìm thấy nút tạo/gửi.", BUTTON_AMBIGUOUS: "Không xác định được nút tạo/gửi.",
     BUTTON_DISABLED: "Nút tạo đang bị vô hiệu hóa.", FLOW_BUSY: "Tab dịch vụ đang xử lý tác vụ khác.", FLOW_ERROR: "Dịch vụ báo lỗi; kiểm tra tab.",
     TIMEOUT: "Hết thời gian chờ kết quả. Không tự gửi lại để tránh tạo trùng.", GPT_TIMEOUT: "Hết thời gian chờ ảnh ChatGPT. Kiểm tra tab trước khi chạy lại.",
+    GPT_NO_IMAGE: "ChatGPT đã dừng trước khi trả ảnh. Mục này chưa hoàn thành; bấm Tiếp tục để thử lại đúng prompt này.",
+    GPT_BATCH_CANCEL_FAILED: "Không bấm được nút Dừng ChatGPT ở mốc 10 prompt. Hàng đợi đã dừng để tránh lệch thứ tự.",
     IMAGE_CORS: "Không tự tải được ảnh do CORS/miền URL. Tải bằng nút dịch vụ; không chạy lại prompt này.",
     GPT_IMAGE_URL: "Không tự tải được URL ảnh ChatGPT. Tải bằng nút ChatGPT; không gửi lại prompt.",
     VIDEO_SOURCE_EXTERNAL: "Video nằm ngoài miền được phép tải. Hãy dùng nút tải Flow.", VIDEO_SOURCE_UNAVAILABLE: "Flow chưa cung cấp tệp video có thể đọc; tải bằng Flow.",
@@ -142,13 +144,29 @@ async function runQueue(run, config, startIndex) {
     for (let i = startIndex; i < run.items.length; i++) {
       check(run); const item = run.items[i]; run.index = i;
       item.status = "typing"; item.detail = ""; run.status = `Đang nhập prompt ${i + 1} / ${run.items.length}…`; publish(run);
-      const id = crypto.randomUUID();
-      const result = await request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType,
+      const makeRequest = cancelAfterSend => {
+        const id = crypto.randomUUID();
+        return request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType, cancelAfterSend,
         ...(config.provider === "chatgpt" ? { seenImageUrls: [...run.seenImageUrls] } : {}) },
         value => value?.type === "RESULT" && value.id === id,
         (config.timeout + (config.mediaType === "video" ? 120 : 20)) * 1000, run,
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
+      };
+      let result = await makeRequest(config.provider === "chatgpt" && (i + 1) % 10 === 0);
       check(run);
+      if (!result.ok && result.code === "GPT_BATCH_CANCELLED") {
+        const cooldown = 5 + Math.floor(Math.random() * 6);
+        item.status = "stopped";
+        item.detail = `Đã bấm Dừng theo chu kỳ; nghỉ ${cooldown} giây rồi gửi lại prompt này.`;
+        run.status = `Đã dừng ChatGPT ở prompt ${i + 1}; nghỉ ${cooldown} giây rồi chạy lại prompt này…`;
+        publish(run);
+        await sleep(cooldown * 1000, run);
+        check(run);
+        item.status = "typing"; item.detail = "Đang gửi lại prompt sau thời gian nghỉ.";
+        run.status = `Đang chạy lại prompt ${i + 1}…`; publish(run);
+        result = await makeRequest(false);
+        check(run);
+      }
       if (!result.ok) { const error = new Error(queueError(result.code)); error.code = result.code; throw error; }
       const imageIdentity = config.provider === "chatgpt" && config.mediaType === "image" && result.downloadUrl
         ? result.downloadUrl : "";
