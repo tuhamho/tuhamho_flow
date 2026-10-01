@@ -126,3 +126,35 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
   assert.equal(downloads.length, 2);
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
 });
+test('Worker stops before downloading a repeated ChatGPT image URL', async () => {
+  const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [];
+  const createPort = () => {
+    const onMessage = event(), onDisconnect = event();
+    return { onMessage, onDisconnect, postMessage(message) {
+      if (message.type === 'RUN') {
+        promptsSent.push(message.prompt);
+        queueMicrotask(() => onMessage.emit({ type: 'RESULT', id: message.id, ok: true,
+          downloadUrl: 'https://chatgpt.com/backend-api/estuary/content?id=same-image', extension: 'png' }));
+      }
+    }, disconnect() { onDisconnect.emit(); } };
+  };
+  const context = { FlowUtils: U, importScripts() {}, crypto: require('node:crypto').webcrypto, AbortController,
+    setTimeout, clearTimeout, setInterval, clearInterval, chrome: {
+      runtime: { id: 'test', getURL: file => `chrome-extension://test/${file}`, onMessage, onInstalled: event(), sendMessage: async () => {} },
+      sidePanel: { setPanelBehavior: async () => {} },
+      storage: { local: { setAccessLevel: async () => {}, get: async () => ({ queueState: stored.queueState }), set: async value => Object.assign(stored, value) } },
+      tabs: { get: async () => ({ url: 'https://chatgpt.com/c/test' }), sendMessage: async () => ({ ok: true }), connect: createPort },
+      downloads: { onChanged: downloadChanged, download: async options => { downloads.push(options); return downloads.length; },
+        search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
+    } };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
+  const config = { ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts: 'first\nsecond', delayMin: '0', delayMax: '0' };
+  const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, tabId: 7 },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
+  assert.equal(started.ok, true);
+  for (let i = 0; i < 50 && stored.queueState?.items?.[1]?.status !== 'error'; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(promptsSent, ['first', 'second']);
+  assert.equal(downloads.length, 1);
+  assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'error']);
+  assert.match(stored.queueState.items[1].detail, /cùng một URL ảnh/);
+});

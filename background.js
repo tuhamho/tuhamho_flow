@@ -81,7 +81,8 @@ function queueError(code) {
     VIDEO_SOURCE_EXTERNAL: "Video nằm ngoài miền được phép tải. Hãy dùng nút tải Flow.", VIDEO_SOURCE_UNAVAILABLE: "Flow chưa cung cấp tệp video có thể đọc; tải bằng Flow.",
     VIDEO_PENDING_TIMEOUT: "Video vẫn đang xếp hàng khi hết thời gian chờ. Kiểm tra Flow; không gửi lại.",
     STOPPED: "Đã dừng theo yêu cầu.", BUSY: "Tab dịch vụ đang chạy một lượt khác.", NAVIGATED: "Tab dịch vụ đã chuyển trang; hàng đợi dừng.",
-    GPT_MULTIPLE_IMAGES: "Phản hồi ChatGPT hiện nhiều ảnh trong cùng một câu trả lời; đã dừng để tránh tải nhầm.", MULTIPLE_IMAGES: "Có nhiều ảnh mới; dừng để tránh tải nhầm.",
+    GPT_MULTIPLE_IMAGES: "Phản hồi ChatGPT hiện nhiều ảnh trong cùng một câu trả lời; đã dừng để tránh tải nhầm.",
+    GPT_DUPLICATE_RESULT: "ChatGPT trả lại cùng một URL ảnh như prompt trước; đã dừng để không tải trùng.", MULTIPLE_IMAGES: "Có nhiều ảnh mới; dừng để tránh tải nhầm.",
     MULTIPLE_VIDEOS: "Có nhiều video mới; dừng để tránh tải nhầm."
   };
   return messages[code] || `Không hoàn thành được tác vụ (${String(code).slice(0, 80)}). Kiểm tra tab dịch vụ.`;
@@ -148,9 +149,15 @@ async function runQueue(run, config, startIndex) {
         phase => { item.status = phase; run.status = phase === "typing" ? `Đang nhập prompt ${i + 1}…` : `Đang chờ kết quả prompt ${i + 1}…`; publish(run); });
       check(run);
       if (!result.ok) { const error = new Error(queueError(result.code)); error.code = result.code; throw error; }
+      const imageIdentity = config.provider === "chatgpt" && config.mediaType === "image" && result.downloadUrl
+        ? result.downloadUrl : "";
+      if (imageIdentity && run.seenImageUrls.has(imageIdentity)) {
+        const error = new Error(queueError("GPT_DUPLICATE_RESULT")); error.code = "GPT_DUPLICATE_RESULT"; throw error;
+      }
       item.status = "downloading"; run.status = `Đang tải kết quả ${i + 1}…`; publish(run);
       const imageName = config.mediaType === "image" ? U.imageTitle(item.prompt, result.imageName) : "";
       await downloadResult(result, U.filename(config, i, batchId, result.extension, imageName), result.extension, run);
+      if (imageIdentity) run.seenImageUrls.add(imageIdentity);
       item.status = "done"; item.detail = "Tệp đã tải xong."; run.status = `${i + 1} / ${run.items.length} hoàn thành.`; publish(run);
       if (i < run.items.length - 1) await sleep((config.delayMin + Math.random() * (config.delayMax - config.delayMin)) * 1000, run);
     }
@@ -210,7 +217,7 @@ function handlePanelMessage(message, respond) {
       for (let i = normalizedStart; i < items.length; i++) if (!["done", "skipped"].includes(items[i].status)) { items[i].status = "pending"; items[i].detail = ""; }
     }
     const run = { provider: config.provider, mediaType: config.mediaType, tabId: message.tabId, items, index: normalizedStart,
-      controller: new AbortController(), status: "Đang chuẩn bị…", error: "", finished: false, userStopped: false };
+      controller: new AbortController(), status: "Đang chuẩn bị…", error: "", finished: false, userStopped: false, seenImageUrls: new Set() };
     activeRun = run; starting = false; publish(run);
     respond({ ok: true, running: true });
     void runQueue(run, config, normalizedStart);
