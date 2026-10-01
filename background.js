@@ -149,7 +149,8 @@ async function runQueue(run, config, startIndex) {
       check(run);
       if (!result.ok) { const error = new Error(queueError(result.code)); error.code = result.code; throw error; }
       item.status = "downloading"; run.status = `Đang tải kết quả ${i + 1}…`; publish(run);
-      await downloadResult(result, U.filename(config, i, batchId, result.extension), result.extension, run);
+      const imageName = config.mediaType === "image" ? U.imageTitle(item.prompt, result.imageName) : "";
+      await downloadResult(result, U.filename(config, i, batchId, result.extension, imageName), result.extension, run);
       item.status = "done"; item.detail = "Tệp đã tải xong."; run.status = `${i + 1} / ${run.items.length} hoàn thành.`; publish(run);
       if (i < run.items.length - 1) await sleep((config.delayMin + Math.random() * (config.delayMax - config.delayMin)) * 1000, run);
     }

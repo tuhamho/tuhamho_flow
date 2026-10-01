@@ -49,7 +49,10 @@ function preview() {
     ? "💡 Mở chatgpt.com, đăng nhập và chọn chế độ có thể tạo ảnh. Tiện ích gửi prompt theo thứ tự, chờ ảnh mới rồi tự tải. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống."
     : "💡 Chọn đúng tab Google Flow và loại Ảnh/Video; mỗi lượt chỉ tạo 1 kết quả. Có thể đóng panel hoặc chuyển tab sau khi bấm Bắt đầu. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.";
   const sampleExt = video ? ".mp4 hoặc .webm" : ".png, .jpg hoặc .webp";
-  ui.folderPreview.textContent = `Downloads / ${U.safeSegment(ui.folder.value)} / ${ui.serial.checked ? "001_" : ""}${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}${sampleExt}`;
+  const fileStem = video
+    ? `${ui.serial.checked ? "001_" : ""}${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}`
+    : `${ui.serial.checked ? "001_" : ""}tên-ảnh_${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}`;
+  ui.folderPreview.textContent = `Downloads / ${U.safeSegment(ui.folder.value)} / ${fileStem}${sampleExt}`;
   ui.mediaHint.textContent = video
     ? "Chờ video thật sẵn sàng, không lấy ảnh thumbnail. Nên tăng thời gian chờ trong Tùy chọn bổ sung."
     : "Chọn Ảnh khi Flow đang tạo ảnh. Không dùng ảnh thumbnail của video làm kết quả.";

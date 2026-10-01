@@ -367,7 +367,7 @@ async function panelPage() {
     await page.waitForFunction(() => document.querySelector('#progress').textContent === '1 / 1 hoàn thành');
     const saved = await page.evaluate(() => mock.downloads[0]);
     assert.equal(saved.url, 'https://lh3.googleusercontent.com/flow-result.png');
-    assert.match(saved.filename, /^anh-flow\/001_anh-.*\.png$/); await page.close();
+    assert.match(saved.filename, /^anh-flow\/001_Ảnh tĩnh_tuhamho\.png$/); await page.close();
   });
   await check('Panel chọn ChatGPT, tự tải ảnh vào thư mục đã chọn', async () => {
     const page = await panelPage();
@@ -382,7 +382,7 @@ async function panelPage() {
     const data = await page.evaluate(() => ({ run: mock.runs[0], download: mock.downloads[0], saved: mock.values.settings.provider }));
     assert.equal(data.run.prompt, 'Một chú mèo màu xanh'); assert.equal(data.saved, 'chatgpt');
     assert.match(data.download.url, /^https:\/\/chatgpt\.com\/backend-api\//);
-    assert.match(data.download.filename, /^anh-chatgpt\/001_anh-/); await page.close();
+    assert.match(data.download.filename, /^anh-chatgpt\/001_Một chú mèo màu xanh_tuhamho\.png$/); await page.close();
   });
   await check('Panel tự tải URL video Google CDN vào đúng thư mục', async () => {
     const page = await panelPage(); await page.evaluate(() => { mock.mode = 'direct-video'; });

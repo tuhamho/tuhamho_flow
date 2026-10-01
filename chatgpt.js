@@ -215,7 +215,11 @@
           try { url = new URL(candidate, location.href); } catch { fail("GPT_IMAGE_URL"); }
           if (!FlowUtils.isChatGPTMediaUrl(url.href)) fail("GPT_IMAGE_URL");
           const ext = /\.(jpe?g|webp)(?:$|[?#])/i.exec(url.pathname)?.[1]?.toLowerCase() || "png";
-          return { downloadUrl: url.href, extension: ext === "jpeg" ? "jpg" : ext };
+          const imageName = [selected.getAttribute("download"), selected.getAttribute("data-filename"),
+            selected.getAttribute("alt"), selected.getAttribute("title")]
+            .map(value => normalizeText(value)).find(value => value &&
+              !/^(?:ảnh|image|ảnh được tạo|generated image|created image)(?:\s*\d+)?$/i.test(value)) || "";
+          return { downloadUrl: url.href, extension: ext === "jpeg" ? "jpg" : ext, imageName };
         }
       } else { candidate = ""; stableSince = 0; }
       await waitForPageChange(1200, job);

@@ -41,6 +41,11 @@ test('Tên tệp chặn traversal, ký tự điều khiển và tên thiết b�
   assert.ok(!U.filename({ folder: 'Flow', serial: false }, 0, 'batch').includes('001_'));
   assert.match(U.filename({ folder: 'Flow', serial: true }, 0, 'batch', 'mp4'), /\/001_tuhamho\.mp4$/);
   assert.match(U.filename({ folder: 'Flow', filenameBase: 'My: File', serial: true }, 1, 'batch'), /\/002_My- File\.png$/);
+  assert.equal(U.filename({ folder: 'Downloads', filenameBase: 'tuhamho', serial: true }, 35, 'batch', 'png', 'Nhà khảo cổ và điều chưa biết'),
+    'Downloads/036_Nhà khảo cổ và điều chưa biết_tuhamho.png');
+  assert.equal(U.imageTitle('[00:01] Hand-drawn 2D doodle cartoon animation, flat solid colors, bold black hand-drawn outlines, slightly wobbly imperfect marker lines, a cave archaeologist, lantern and fossils, no text'),
+    'cave archaeologist');
+  assert.equal(U.imageTitle('prompt', 'Ảnh được tạo 1'), 'prompt');
 });
 test('Đọc dòng UTF-8 BOM/CRLF/CR, giữ văn bản HTML nguyên dạng dữ liệu', () => {
   assert.deepEqual(U.parsePrompts('\uFEFF a\r\n \n b\rc\n<img onerror=x>'), ['a', 'b', 'c', '<img onerror=x>']);

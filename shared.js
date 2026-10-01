@@ -74,12 +74,28 @@ globalThis.FlowUtils = (() => {
     if (provider === "chatgpt" && settings.mediaType !== "image") throw new Error("ChatGPT hiện chỉ hỗ trợ tạo ảnh.");
     return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
   }
-  function filename(settings, index, batchId, extension = "png") {
-    // Không đưa prompt vào tên tệp (tên tệp có thể xuất hiện trong lịch sử tải).
+  function imageTitle(prompt, suggested = "") {
+    const clean = value => String(value || "").replace(/\s+/g, " ").trim()
+      .replace(/\.(?:png|jpe?g|webp)$/i, "");
+    const generic = /^(?:ảnh|image|ảnh được tạo|generated image|created image)(?:\s*\d+)?$/i;
+    let title = clean(suggested);
+    if (title && !generic.test(title)) return safeSegment(title.slice(0, 72), "anh");
+
+    // ChatGPT đôi khi chỉ gắn nhãn chung cho ảnh. Khi đó dùng phần mô tả cảnh
+    // đầu tiên trong prompt, bỏ đoạn mở đầu chỉ nói về phong cách vẽ.
+    title = clean(prompt).replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/, "")
+      .replace(/^hand-drawn\s+2d\s+doodle\s+cartoon\s+animation,\s*flat\s+solid\s+colors,\s*bold\s+black\s+hand-drawn\s+outlines,\s*slightly\s+wobbly\s+imperfect\s+marker\s+lines,\s*/i, "")
+      .replace(/^(?:a|an|the)\s+/i, "");
+    title = clean(title.split(/[.;\n]/, 1)[0]).split(",", 1)[0];
+    return safeSegment(title.slice(0, 72), "anh");
+  }
+  function filename(settings, index, batchId, extension = "png", title = "") {
     const safeExtension = ["png", "jpg", "jpeg", "webp", "mp4", "webm"].includes(extension) ? extension : "png";
     const prefix = settings.serial ? `${String(index + 1).padStart(3, "0")}_` : "";
     const unique = settings.serial ? "" : `-${safeSegment(batchId, "flow")}`;
-    return `${safeSegment(settings.folder)}/${prefix}${safeSegment(settings.filenameBase || "tuhamho", "tuhamho")}${unique}.${safeExtension}`;
+    const name = title ? `${imageTitle("", title)}_${safeSegment(settings.filenameBase || "tuhamho", "tuhamho")}`
+      : safeSegment(settings.filenameBase || "tuhamho", "tuhamho");
+    return `${safeSegment(settings.folder)}/${prefix}${name}${unique}.${safeExtension}`;
   }
-  return Object.freeze({ defaults, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, filename });
+  return Object.freeze({ defaults, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, imageTitle, filename });
 })();

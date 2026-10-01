@@ -407,14 +407,17 @@
     }
     const image = await waitForImage(oldUrls, oldAlerts, job, message.timeout);
     check(job);
-    try { return { dataUrl: exportImage(image, job), extension: "png" }; }
+    const imageName = [image.getAttribute("download"), image.getAttribute("data-filename"), image.getAttribute("alt"), image.getAttribute("title")]
+      .map(value => String(value || "").replace(/\s+/g, " ").trim()).find(value => value &&
+        !/^(?:ảnh|image|ảnh được tạo|generated image|created image)(?:\s*\d+)?$/i.test(value)) || "";
+    try { return { dataUrl: exportImage(image, job), extension: "png", imageName }; }
     catch (error) {
       if (error.message !== "IMAGE_CORS") throw error;
       // Canvas không đọc được pixel ảnh CDN. Chỉ trả URL của đúng thẻ ảnh
       // kết quả mới và đang hiện; panel sẽ kiểm tra lại trước khi tải.
       const downloadUrl = mediaDownloadUrl(source(image));
       if (!downloadUrl) throw error;
-      return { downloadUrl, extension: imageExtension(downloadUrl) };
+      return { downloadUrl, extension: imageExtension(downloadUrl), imageName };
     }
   }
 
