@@ -82,12 +82,19 @@ globalThis.FlowUtils = (() => {
     const clean = value => String(value || "").replace(/\s+/g, " ").trim()
       .replace(/\.(?:png|jpe?g|webp)$/i, "");
     const generic = /^(?:ảnh|image|ảnh được tạo|generated image|created image)(?:\s*\d+)?$/i;
-    let title = clean(suggested);
-    if (title && !generic.test(title)) return safeSegment(title.slice(0, 72), "anh");
+    const timecode = String.raw`\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?`;
+    const withoutTimestamp = value => clean(value).replace(new RegExp(String.raw`^\[${timecode}\]\s*`), "").trim();
+    const useful = value => value && !generic.test(value) && !new RegExp(String.raw`^\[?${timecode}\]?$`).test(value);
+    let title = withoutTimestamp(suggested);
+    if (useful(title)) {
+      title = title.replace(/^hand-drawn\s+2d\s+doodle\s+cartoon\s+animation,\s*flat\s+solid\s+colors,\s*bold\s+black\s+hand-drawn\s+outlines,\s*slightly\s+wobbly\s+imperfect\s+marker\s+lines,\s*/i, "")
+        .replace(/^(?:a|an|the)\s+/i, "").split(/[.;\n]/, 1)[0].split(",", 1)[0].trim();
+      if (useful(title)) return safeSegment(title.slice(0, 72), "anh");
+    }
 
     // ChatGPT đôi khi chỉ gắn nhãn chung cho ảnh. Khi đó dùng phần mô tả cảnh
     // đầu tiên trong prompt, bỏ đoạn mở đầu chỉ nói về phong cách vẽ.
-    title = clean(prompt).replace(/^\[\d{1,2}:\d{2}(?::\d{2})?\]\s*/, "")
+    title = withoutTimestamp(prompt)
       .replace(/^hand-drawn\s+2d\s+doodle\s+cartoon\s+animation,\s*flat\s+solid\s+colors,\s*bold\s+black\s+hand-drawn\s+outlines,\s*slightly\s+wobbly\s+imperfect\s+marker\s+lines,\s*/i, "")
       .replace(/^(?:a|an|the)\s+/i, "");
     title = clean(title.split(/[.;\n]/, 1)[0]).split(",", 1)[0];

@@ -46,6 +46,12 @@ test('Tên tệp chặn traversal, ký tự điều khiển và tên thiết b�
   assert.equal(U.imageTitle('[00:01] Hand-drawn 2D doodle cartoon animation, flat solid colors, bold black hand-drawn outlines, slightly wobbly imperfect marker lines, a cave archaeologist, lantern and fossils, no text'),
     'cave archaeologist');
   assert.equal(U.imageTitle('prompt', 'Ảnh được tạo 1'), 'prompt');
+  assert.equal(U.imageTitle('[00:18] Hand-drawn 2D doodle cartoon animation, flat solid colors, bold black hand-drawn outlines, slightly wobbly imperfect marker lines, an archaeologist examines a fossil, no text', '[00:18]'),
+    'archaeologist examines a fossil');
+  assert.equal(U.imageTitle('prompt', '[0:00]'), 'prompt');
+  assert.equal(U.imageTitle('[0:14.550] Hand-drawn 2D doodle cartoon animation, flat solid colors, bold black hand-drawn outlines, slightly wobbly imperfect marker lines, an archaeologist studies a fossil, no text', '[0:14.550]'),
+    'archaeologist studies a fossil');
+  assert.equal(U.imageTitle('prompt', '[0:14.550]'), 'prompt');
 });
 test('Đọc dòng UTF-8 BOM/CRLF/CR, giữ văn bản HTML nguyên dạng dữ liệu', () => {
   assert.deepEqual(U.parsePrompts('\uFEFF a\r\n \n b\rc\n<img onerror=x>'), ['a', 'b', 'c', '<img onerror=x>']);
