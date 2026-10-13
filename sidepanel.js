@@ -2,10 +2,11 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabBlock", "tabLabel", "mediaType", "mediaHint", "museSettings", "museOptions", "museBaseUrl", "musePassword", "museTest", "museTestStatus", "museFrame", "museSeconds", "museAutoChain", "prompts", "promptHint", "museSceneEditors", "museSceneList", "museAddScene", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabBlock", "tabLabel", "mediaType", "mediaHint", "museSettings", "museProjectSettings", "museProject", "museCreateProject", "museRefreshProjects", "museProjectStatus", "museLibrary", "museLoadLibrary", "museLibraryStatus", "museLibraryList", "museOptions", "museBaseUrl", "musePassword", "museTest", "museTestStatus", "museFrame", "museSeconds", "museAutoChain", "prompts", "promptHint", "museSceneEditors", "museSceneList", "museAddScene", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
 const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
+let museProjects = [], libraryVideos = [];
 let saveTail = Promise.resolve();
 function currentPrompts() {
   return ui.provider.value === "muse" ? U.parseMusePrompts(ui.prompts.value) : U.parsePrompts(ui.prompts.value);
@@ -32,7 +33,7 @@ function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !
 function settings() {
   return { prompts: ui.prompts.value, folder: ui.folder.value, filenameBase: ui.filenameBase.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
     startFrom: ui.startFrom.value, batchEvery: ui.batchEvery.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value,
-    museBaseUrl: ui.museBaseUrl.value, musePassword: ui.musePassword.value, museFrame: ui.museFrame.value, museSeconds: ui.museSeconds.value, museAutoChain: ui.museAutoChain.checked };
+    museBaseUrl: ui.museBaseUrl.value, musePassword: ui.musePassword.value, museFrame: ui.museFrame.value, museSeconds: ui.museSeconds.value, museAutoChain: ui.museAutoChain.checked, museProject: ui.museProject.value };
 }
 function queueMatchesCurrent() {
   return Boolean(queueMeta && queueMeta.provider === ui.provider.value && queueMeta.mediaType === ui.mediaType.value &&
@@ -49,7 +50,7 @@ function persistQueueState() {
   if (!items.length || !queueMeta) return chrome.storage.local.remove("queueState");
   return chrome.storage.local.set({ queueState: {
     version: 1, provider: queueMeta.provider, mediaType: queueMeta.mediaType,
-    prompts: items.map(item => item.prompt), items: items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })),
+    prompts: items.map(item => item.prompt), items: items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}), ...(item.project ? { project: item.project } : {}) })),
     updatedAt: Date.now()
   } });
 }
@@ -64,7 +65,9 @@ function preview() {
   ui.mediaType.disabled = chatgpt || muse;
   ui.batchBlock.hidden = !chatgpt;
   ui.museSettings.hidden = !muse;
+  ui.museProjectSettings.hidden = !muse;
   ui.museOptions.hidden = !muse;
+  ui.museLibrary.hidden = !muse;
   ui.museSceneEditors.hidden = !muse || (!currentPrompts().length && !ui.prompts.value.trim());
   ui.tabBlock.hidden = muse;
   ui.providerHint.textContent = muse
@@ -120,16 +123,112 @@ function render() {
     text.textContent = item.prompt; text.title = item.prompt;
     const tag = document.createElement("span"); tag.className = `tag ${item.status}`; tag.textContent = labels[item.status];
     head.append(number, text, tag); li.append(head);
+    if (queueMeta?.provider === "muse") {
+      const row = document.createElement("label"); row.className = "item-project";
+      const caption = document.createElement("span"); caption.textContent = "Dự án:";
+      const select = document.createElement("select"); select.dataset.projectIndex = String(index); select.setAttribute("aria-label", `Dự án cho cảnh ${index + 1}`);
+      const fallback = document.createElement("option"); fallback.value = ""; fallback.textContent = ui.museProject.value ? `Dùng chung · ${ui.museProject.value}` : "Dùng dự án chung"; select.append(fallback);
+      const choices = [...new Set([...museProjects, ...(item.project ? [item.project] : [])])];
+      for (const project of choices) { const option = document.createElement("option"); option.value = project; option.textContent = project; select.append(option); }
+      select.value = item.project || ""; row.append(caption, select); li.append(row);
+    }
     if (item.detail) { const detail = document.createElement("p"); detail.className = "detail"; detail.textContent = item.detail; li.append(detail); }
     return li;
   });
   ui.queue.replaceChildren(...nodes);
 }
+function museConfig() { return { museBaseUrl: ui.museBaseUrl.value, musePassword: ui.musePassword.value }; }
+async function refreshMuseProjects(selectName = null) {
+  ui.museProjectStatus.textContent = "Đang tải dự án…";
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "MUSE_LIST_PROJECTS", config: museConfig() });
+    if (!response?.ok) throw new Error(response?.error || "Không tải được danh sách dự án.");
+    museProjects = response.projects;
+    const selected = selectName ?? ui.museProject.value;
+    ui.museProject.replaceChildren(new Option("Không chọn dự án", ""), ...museProjects.map(name => new Option(name, name)));
+    if (selected && !museProjects.includes(selected)) ui.museProject.add(new Option(selected, selected));
+    ui.museProject.value = selected && [...ui.museProject.options].some(option => option.value === selected) ? selected : "";
+    ui.museProjectStatus.textContent = `${museProjects.length} dự án.`;
+    render();
+    return true;
+  } catch (error) { ui.museProjectStatus.textContent = error.message; return false; }
+}
+function refreshMuseDraftQueue() {
+  if (currentRun || ui.provider.value !== "muse") return;
+  const prompts = currentPrompts();
+  const previous = items;
+  items = prompts.map((prompt, index) => {
+    const old = previous[index];
+    return { prompt, status: old?.prompt === prompt ? old.status : "pending", detail: old?.prompt === prompt ? old.detail : "",
+      ...(old?.prompt === prompt && old.taskId ? { taskId: old.taskId } : {}), ...(old?.project ? { project: old.project } : {}) };
+  });
+  queueMeta = { provider: "muse", mediaType: "video", prompts };
+  render();
+  void persistQueueState();
+}
+async function loadMuseLibrary() {
+  ui.museLoadLibrary.disabled = true; ui.museLibraryStatus.textContent = "Đang tải thư viện…";
+  ui.museLibraryList.replaceChildren();
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "MUSE_LIST_VIDEOS", config: museConfig() });
+    if (!response?.ok) throw new Error(response?.error || "Không tải được thư viện.");
+    libraryVideos = response.videos;
+    const groups = new Map();
+    for (const video of libraryVideos) { const name = video.du_an || "Chưa phân loại"; if (!groups.has(name)) groups.set(name, []); groups.get(name).push(video); }
+    const nodes = [];
+    for (const [name, videos] of groups) {
+      const group = document.createElement("section"); group.className = "library-group";
+      const heading = document.createElement("h3"); heading.textContent = `${name} · ${videos.length}`; group.append(heading);
+      for (const video of videos) {
+        const card = document.createElement("article"); card.className = "library-video";
+        const img = document.createElement("img"); img.alt = `Ảnh xem trước ${video.title}`; img.loading = "lazy";
+        if (video.thumbPath) {
+          const thumb = await chrome.runtime.sendMessage({ type: "MUSE_GET_THUMBNAIL", config: museConfig(), thumbPath: video.thumbPath });
+          if (thumb?.ok) img.src = thumb.dataUrl;
+        }
+        const meta = document.createElement("div"); meta.className = "video-meta";
+        const title = document.createElement("div"); title.className = "video-title"; title.textContent = `${video.title}${video.duration ? ` · ${video.duration}s` : ""}`;
+        const actions = document.createElement("div"); actions.className = "video-actions";
+        const project = document.createElement("select"); project.setAttribute("aria-label", `Chuyển video ${video.title} sang dự án`);
+        project.append(new Option("Thư mục gốc", ""), ...museProjects.map(value => new Option(value, value)));
+        if (video.du_an && !museProjects.includes(video.du_an)) project.add(new Option(video.du_an, video.du_an));
+        project.value = video.du_an;
+        const move = document.createElement("button"); move.type = "button"; move.className = "btn btn--ghost"; move.textContent = "Chuyển";
+        move.addEventListener("click", async () => {
+          move.disabled = true;
+          try {
+            const result = await chrome.runtime.sendMessage({ type: "MUSE_MOVE_VIDEO", config: museConfig(), videoId: video.id, project: project.value || null });
+            if (!result?.ok) throw new Error(result?.error || "Không chuyển được video.");
+            await loadMuseLibrary();
+          } catch (error) { ui.museLibraryStatus.textContent = error.message; move.disabled = false; }
+        });
+        const download = document.createElement("button"); download.type = "button"; download.className = "btn btn--ghost"; download.textContent = "Tải MP4"; download.disabled = !video.videoPath;
+        download.title = video.videoPath ? "Tải video này" : "API không trả đường dẫn MP4 cho video này";
+        download.addEventListener("click", async () => {
+          download.disabled = true; ui.museLibraryStatus.textContent = `Đang tải ${video.title}…`;
+          try {
+            const config = { folder: U.safeSegment(ui.folder.value), filenameBase: U.safeSegment(ui.filenameBase.value || "tuhamho", "tuhamho"), serial: ui.serial.checked };
+            const filename = U.filename(config, libraryVideos.indexOf(video), "muse-library", "mp4", video.title);
+            const result = await chrome.runtime.sendMessage({ type: "MUSE_DOWNLOAD_LIBRARY_VIDEO", config: museConfig(), videoPath: video.videoPath, filename });
+            if (!result?.ok) throw new Error(result?.error || "Không tải được video.");
+            ui.museLibraryStatus.textContent = `Đã tải ${video.title}.`;
+          } catch (error) { ui.museLibraryStatus.textContent = error.message; }
+          finally { download.disabled = false; }
+        });
+        actions.append(project, move, download); meta.append(title, actions); card.append(img, meta); group.append(card);
+      }
+      nodes.push(group);
+    }
+    ui.museLibraryList.replaceChildren(...nodes);
+    ui.museLibraryStatus.textContent = `${libraryVideos.length} video.`;
+  } catch (error) { ui.museLibraryStatus.textContent = error.message; }
+  finally { ui.museLoadLibrary.disabled = false; }
+}
 function applyQueueUpdate(update) {
   if (!update?.state || update.state.version !== 1 || !Array.isArray(update.state.prompts) || !Array.isArray(update.state.items)) return;
   queueMeta = { provider: update.state.provider, mediaType: update.state.mediaType, prompts: update.state.prompts };
   items = update.state.prompts.map((prompt, index) => ({ prompt, status: update.state.items[index]?.status || "pending", detail: update.state.items[index]?.detail || "",
-    ...(update.state.items[index]?.taskId ? { taskId: update.state.items[index].taskId } : {}) }));
+    ...(update.state.items[index]?.taskId ? { taskId: update.state.items[index].taskId } : {}), ...(update.state.items[index]?.project ? { project: update.state.items[index].project } : {}) }));
   currentRun = update.running ? { background: true } : null;
   toggleRunning(Boolean(currentRun)); render();
   ui.status.textContent = update.status || (currentRun ? "Hàng đợi đang chạy nền." : "");
@@ -199,7 +298,7 @@ async function start(event) {
   ui.status.textContent = "Đang chuyển hàng đợi sang chạy nền…";
   try {
     clearTimeout(saveTimer); await saveSettings();
-    const response = await chrome.runtime.sendMessage({ type: "START_QUEUE", config: settings(), ...(muse ? {} : { tabId: Number(ui.flowTab.value) }) });
+    const response = await chrome.runtime.sendMessage({ type: "START_QUEUE", config: settings(), ...(muse ? { itemProjects: items.map(item => item.project || "") } : { tabId: Number(ui.flowTab.value) }) });
     if (!response?.ok) throw new Error(response?.error || "Không khởi chạy được hàng đợi nền.");
   } catch (error) {
     currentRun = null; toggleRunning(false); showError(error.message || "Không kết nối được với tiến trình nền.");
@@ -212,13 +311,40 @@ chrome.runtime.onMessage.addListener(message => {
 });
 ui.stop.addEventListener("click", () => { if (currentRun) void chrome.runtime.sendMessage({ type: "STOP_QUEUE" }); });
 ui.fields.addEventListener("input", event => {
-  if (event.target === ui.prompts) updateMuseSceneEditors();
+  if (event.target === ui.prompts) { updateMuseSceneEditors(); refreshMuseDraftQueue(); }
   scheduleSave();
 });
-ui.fields.addEventListener("change", scheduleSave);
+ui.fields.addEventListener("change", event => {
+  if (event.target.matches("#museSceneList textarea")) refreshMuseDraftQueue();
+  if (event.target === ui.museProject) render();
+  scheduleSave();
+});
+ui.queue.addEventListener("change", event => {
+  if (event.target.dataset.projectIndex === undefined) return;
+  const index = Number(event.target.dataset.projectIndex);
+  if (!Number.isInteger(index) || !items[index]) return;
+  items[index].project = U.cleanMuseProject(event.target.value);
+  if (!items[index].project) delete items[index].project;
+  render(); void persistQueueState();
+});
+ui.museRefreshProjects.addEventListener("click", () => void refreshMuseProjects());
+ui.museCreateProject.addEventListener("click", async () => {
+  const name = window.prompt("Tên dự án Muse mới:");
+  if (name === null) return;
+  ui.museProjectStatus.textContent = "Đang tạo dự án…";
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "MUSE_CREATE_PROJECT", config: museConfig(), name });
+    if (!response?.ok) throw new Error(response?.error || "Không tạo được dự án.");
+    await refreshMuseProjects(response.name);
+    scheduleSave();
+  } catch (error) { ui.museProjectStatus.textContent = error.message; }
+});
+ui.museBaseUrl.addEventListener("change", () => { scheduleSave(); if (ui.provider.value === "muse") void refreshMuseProjects(); });
+ui.musePassword.addEventListener("change", () => { scheduleSave(); if (ui.provider.value === "muse") void refreshMuseProjects(); });
+ui.museLoadLibrary.addEventListener("click", () => void loadMuseLibrary());
 ui.museAddScene.addEventListener("click", () => {
   const scenes = [...ui.museSceneList.querySelectorAll("textarea")].map(input => input.value);
-  scenes.push(""); writeMuseScenes(scenes); updateMuseSceneEditors(scenes); preview();
+  scenes.push(""); writeMuseScenes(scenes); updateMuseSceneEditors(scenes); preview(); refreshMuseDraftQueue();
   ui.museSceneList.lastElementChild?.querySelector("textarea")?.focus();
 });
 ui.timeout.addEventListener("input", scheduleSave);
@@ -231,6 +357,7 @@ ui.provider.addEventListener("change", () => {
   if (ui.provider.value === "chatgpt") ui.mediaType.value = "image";
   if (ui.provider.value === "muse") { ui.mediaType.value = "video"; if (Number(ui.timeout.value) === 240) ui.timeout.value = "600"; }
   updateMuseSceneEditors(); scheduleSave(); void refreshTabs();
+  if (ui.provider.value === "muse") { refreshMuseDraftQueue(); void refreshMuseProjects(); }
 });
 ui.museTest.addEventListener("click", async () => {
   ui.museTest.disabled = true; ui.museTestStatus.textContent = "Đang kiểm tra Muse API…"; showError();
@@ -255,7 +382,7 @@ ui.txtFile.addEventListener("change", async () => {
     const text = await file.text();
     if (currentRun) return;
     if (text.length > 500000) throw new Error();
-    ui.prompts.value = text.replace(/^\uFEFF/, ""); updateMuseSceneEditors(); scheduleSave(); showError();
+    ui.prompts.value = text.replace(/^\uFEFF/, ""); updateMuseSceneEditors(); refreshMuseDraftQueue(); scheduleSave(); showError();
   } catch { showError("Không đọc được tệp, hoặc nội dung vượt 500.000 ký tự. Hãy lưu tệp dưới dạng UTF-8."); }
 });
 ui.clear.addEventListener("click", async () => {
@@ -285,6 +412,8 @@ ui.clear.addEventListener("click", async () => {
     ui.museFrame.value = ["16:9", "9:16"].includes(restored.museFrame) ? restored.museFrame : "16:9";
     ui.museSeconds.value = Number.isInteger(Number(restored.museSeconds)) && Number(restored.museSeconds) >= 5 && Number(restored.museSeconds) <= 15 ? String(restored.museSeconds) : "10";
     ui.museAutoChain.checked = typeof restored.museAutoChain === "boolean" ? restored.museAutoChain : true;
+    ui.museProject.value = "";
+    if (typeof restored.museProject === "string" && restored.museProject) { ui.museProject.add(new Option(restored.museProject, restored.museProject)); ui.museProject.value = restored.museProject; }
     const state = data.queueState;
     const restoredPrompts = ui.provider.value === "muse" ? U.parseMusePrompts(ui.prompts.value) : U.parsePrompts(ui.prompts.value);
     if (state?.version === 1 && ["flow", "chatgpt", "muse"].includes(state.provider) && ["image", "video"].includes(state.mediaType) &&
@@ -295,12 +424,13 @@ ui.clear.addEventListener("click", async () => {
         const saved = state.items[index] || {};
         const status = ["pending", "typing", "generating", "downloading", "done", "skipped", "stopped", "error", "timeout"].includes(saved.status) ? saved.status : "pending";
         const interrupted = ["typing", "generating", "downloading"].includes(status);
-        return { prompt, status: interrupted ? "stopped" : status, ...(saved.taskId ? { taskId: saved.taskId } : {}),
+        return { prompt, status: interrupted ? "stopped" : status, ...(saved.taskId ? { taskId: saved.taskId } : {}), ...(saved.project ? { project: saved.project } : {}),
           detail: interrupted ? "Panel đã đóng khi mục này đang chạy. Kiểm tra tab dịch vụ trước khi tiếp tục." : String(saved.detail || "") };
       });
     }
   } catch { showError("Không khôi phục được cài đặt hoặc tiến độ. Đang dùng cài đặt mặc định."); }
   hydrated = true; toggleRunning(false); updateMuseSceneEditors(); preview(); render();
+  if (ui.provider.value === "muse") void refreshMuseProjects();
   if (items.length) ui.status.textContent = `Đã khôi phục ${items.filter(item => item.status === "done").length} / ${items.length} mục. Bấm “${ui.start.textContent}” để tiếp tục; kiểm tra mục đang dở trước khi gửi lại.`;
   try {
     const running = await chrome.runtime.sendMessage({ type: "GET_QUEUE_STATUS" });

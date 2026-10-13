@@ -2,7 +2,7 @@
 
 // Dùng chung trong panel và kiểm thử, không có thư viện hay mã từ xa.
 globalThis.FlowUtils = (() => {
-  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", batchEvery: 10, delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow", museBaseUrl: "https://tuhamho-muse.serveousercontent.com", musePassword: "", museFrame: "16:9", museSeconds: 10, museAutoChain: true });
+  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", batchEvery: 10, delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow", museBaseUrl: "https://tuhamho-muse.serveousercontent.com", musePassword: "", museFrame: "16:9", museSeconds: 10, museAutoChain: true, museProject: "" });
   const defaultMuseBaseUrl = "https://tuhamho-muse.serveousercontent.com";
   function normalizeMuseBaseUrl(value = defaultMuseBaseUrl) {
     let url;
@@ -12,7 +12,8 @@ globalThis.FlowUtils = (() => {
     }
     return url.href.replace(/\/+$/, "");
   }
-  function buildMuseVideoBody(description, frame = "16:9", seconds = 10, previousTaskId = "") {
+  function cleanMuseProject(value) { return String(value ?? "").trim().slice(0, 100); }
+  function buildMuseVideoBody(description, frame = "16:9", seconds = 10, previousTaskId = "", project = "") {
     const moTa = String(description ?? "").trim();
     if (!moTa) throw new Error("Mô tả video không được để trống.");
     if (!["16:9", "9:16"].includes(frame)) throw new Error("Khung hình Muse phải là 16:9 hoặc 9:16.");
@@ -20,6 +21,8 @@ globalThis.FlowUtils = (() => {
     if (!Number.isInteger(duration) || duration < 5 || duration > 15) throw new Error("Thời lượng Muse phải từ 5 đến 15 giây.");
     const body = { mo_ta: moTa, khung_hinh: frame, so_giay: duration };
     if (typeof previousTaskId === "string" && previousTaskId.trim()) body.tiep_noi_video_id = previousTaskId.trim();
+    const duAn = cleanMuseProject(project);
+    if (duAn) body.du_an = duAn;
     return body;
   }
   function museContinuationId(enabled, previousTaskId, zeroBasedIndex) {
@@ -138,7 +141,7 @@ globalThis.FlowUtils = (() => {
     if (!["16:9", "9:16"].includes(settings.museFrame || "16:9")) throw new Error("Khung hình Muse phải là 16:9 hoặc 9:16.");
     const museSeconds = Number(settings.museSeconds ?? 10);
     if (!Number.isInteger(museSeconds) || museSeconds < 5 || museSeconds > 15) throw new Error("Thời lượng Muse phải từ 5 đến 15 giây.");
-    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, batchEvery, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider, museBaseUrl, musePassword, museFrame: settings.museFrame || "16:9", museSeconds, museAutoChain: settings.museAutoChain !== false };
+    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, batchEvery, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider, museBaseUrl, musePassword, museFrame: settings.museFrame || "16:9", museSeconds, museAutoChain: settings.museAutoChain !== false, museProject: cleanMuseProject(settings.museProject) };
   }
   function imageTitle(prompt, suggested = "") {
     const clean = value => String(value || "").replace(/\s+/g, " ").trim()
@@ -170,5 +173,5 @@ globalThis.FlowUtils = (() => {
       : safeSegment(settings.filenameBase || "tuhamho", "tuhamho");
     return `${safeSegment(settings.folder)}/${prefix}${name}${unique}.${safeExtension}`;
   }
-  return Object.freeze({ defaults, defaultMuseBaseUrl, normalizeMuseBaseUrl, buildMuseVideoBody, museContinuationId, parseMusePollResult, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, parseMusePrompts, validate, imageTitle, filename });
+  return Object.freeze({ defaults, defaultMuseBaseUrl, normalizeMuseBaseUrl, cleanMuseProject, buildMuseVideoBody, museContinuationId, parseMusePollResult, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, parseMusePrompts, validate, imageTitle, filename });
 })();

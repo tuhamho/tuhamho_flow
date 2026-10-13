@@ -200,6 +200,7 @@ async function panelPage() {
       runtime: { onMessage: event(), connect: () => port('lock'), sendMessage: async message => {
         if (message?.type === 'GET_QUEUE_STATUS') return { ok: true, running: false, state: null };
         if (message?.type === 'MUSE_TEST_CONNECTION') return { ok: true, status: 'Kết nối Muse API thành công · mật khẩu đúng.' };
+        if (message?.type === 'MUSE_LIST_PROJECTS') return { ok: true, projects: ['du_an_cao'] };
         if (message?.type === 'START_QUEUE') return { ok: true, running: true };
         return { ok: true };
       } },

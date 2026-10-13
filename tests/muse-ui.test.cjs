@@ -28,6 +28,11 @@ const event = () => {
         runtime: { onMessage: runtimeMessages, connect: () => ({ onMessage: event(), onDisconnect: event(), postMessage() {}, disconnect() {} }),
           sendMessage: async message => message.type === 'MUSE_TEST_CONNECTION'
             ? { ok: true, status: 'Kết nối Muse API thành công · mật khẩu đúng.' }
+            : message.type === 'MUSE_LIST_PROJECTS' ? { ok: true, projects: ['du_an_cao'] }
+            : message.type === 'MUSE_CREATE_PROJECT' ? { ok: true, name: 'du_an_moi' }
+            : message.type === 'MUSE_LIST_VIDEOS' ? { ok: true, videos: [{ id: 'vid-1', du_an: 'du_an_cao', title: 'Video demo', thumbPath: '/results/thumb.png', videoPath: '/results/clip.mp4' }] }
+            : message.type === 'MUSE_GET_THUMBNAIL' ? { ok: true, dataUrl: 'data:image/png;base64,AA==' }
+            : message.type === 'MUSE_MOVE_VIDEO' || message.type === 'MUSE_DOWNLOAD_LIBRARY_VIDEO' ? { ok: true }
             : { ok: true, running: false, state: null } },
         storage: { local: { get: async () => ({}), set: async () => {}, remove: async () => {} } },
         tabs: { query: async () => [{ id: 7, url: 'https://flow.google.com/project/test', active: true }], sendMessage: async () => ({ ok: true }),
@@ -41,6 +46,13 @@ const event = () => {
     await page.locator('#prompts').fill('CẢNH 1:\nMở đầu có nhiều dòng\nchi tiết thêm\n\nCẢNH 2: Kết thúc');
     assert.equal(await page.locator('#count').textContent(), '2 prompt');
     assert.equal(await page.locator('#museSceneList textarea').count(), 2);
+    assert.equal(await page.locator('#queue select').count(), 2);
+    await page.locator('#queue select').nth(0).selectOption('du_an_cao');
+    assert.equal(await page.locator('#queue select').nth(0).inputValue(), 'du_an_cao');
+    await page.evaluate(() => { window.prompt = () => 'du_an_moi'; });
+    await page.locator('#museCreateProject').click();
+    assert.equal(await page.locator('#museProject').inputValue(), 'du_an_moi');
+    assert.equal(await page.locator('#queue select').nth(0).inputValue(), 'du_an_cao');
     assert.equal(await page.locator('#museSceneList textarea').nth(0).inputValue(), 'Mở đầu có nhiều dòng\nchi tiết thêm');
     await page.locator('#museSceneList textarea').nth(1).fill('Kết thúc đã sửa');
     assert.match(await page.locator('#prompts').inputValue(), /CẢNH 2:\nKết thúc đã sửa/);

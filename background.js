@@ -17,7 +17,7 @@ function publish(run, extra = {}) {
     provider: run.provider,
     mediaType: run.mediaType,
     prompts: run.items.map(item => item.prompt),
-    items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })),
+    items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}), ...(item.project ? { project: item.project } : {}) })),
     updatedAt: Date.now()
   };
   run.state = state;
@@ -189,7 +189,7 @@ async function runMuseItem(run, config, item, index, batchId) {
   const deadline = Date.now() + config.timeout * 1000;
   const previous = index > 0 && run.items[index - 1]?.status === "done" ? run.items[index - 1].taskId : "";
   const previousTaskId = U.museContinuationId(config.museAutoChain, previous, index);
-  const body = U.buildMuseVideoBody(item.prompt, config.museFrame, config.museSeconds, previousTaskId);
+  const body = U.buildMuseVideoBody(item.prompt, config.museFrame, config.museSeconds, previousTaskId, item.project || config.museProject);
   const headers = { "Content-Type": "application/json", "X-API-Password": config.musePassword };
   const createResponse = await museFetch(`${config.museBaseUrl}/api/video`, { method: "POST", headers, body: JSON.stringify(body) }, run, deadline);
   const createData = await museJson(createResponse);
@@ -237,6 +237,95 @@ async function testMuseConnection(config) {
   } catch (error) {
     return { ok: false, error: error?.name === "AbortError" ? "Hết thời gian kiểm tra kết nối Muse API." : `Không kết nối được Muse API: ${error?.message || "lỗi mạng"}` };
   } finally { clearTimeout(timer); }
+}
+async function museApiJson(config, path, method = "GET", body) {
+  const baseUrl = U.normalizeMuseBaseUrl(config?.museBaseUrl);
+  const password = String(config?.musePassword || "");
+  if (!password.trim()) throw new Error("Hãy nhập mật khẩu Muse API.");
+  if (!/^\/api\/(?:projects|videos)(?:\/[^/]+\/move)?$/.test(path)) throw new Error("Đường dẫn Muse API không hợp lệ.");
+  const headers = { "X-API-Password": password };
+  const options = { method, headers, credentials: "omit", redirect: "error" };
+  if (body !== undefined) { headers["Content-Type"] = "application/json"; options.body = JSON.stringify(body); }
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(`${baseUrl}${path}`, { ...options, signal: controller.signal });
+    let data = {}; try { data = await response.json(); } catch {}
+    if (!response.ok) throw museHttpError(response.status, data);
+    return { baseUrl, data };
+  } catch (error) { if (error?.name === "AbortError") throw new Error("Muse API phản hồi quá chậm, hãy thử lại."); throw error; }
+  finally { clearTimeout(timer); }
+}
+function museRelativePath(baseUrl, value, extension = "") {
+  if (typeof value !== "string" || !value) return "";
+  try {
+    const url = new URL(value, baseUrl), base = new URL(baseUrl);
+    if (url.origin !== base.origin || url.username || url.password || url.search || url.hash || !url.pathname.startsWith("/")) return "";
+    if (extension === "mp4" && !/^\/results\/[A-Za-z0-9._~!$&'()+,;=@%/-]+\.mp4$/i.test(url.pathname)) return "";
+    if (url.pathname.split("/").includes("..")) return "";
+    return url.pathname;
+  } catch { return ""; }
+}
+async function museThumbnailDataUrl(config, value) {
+  const baseUrl = U.normalizeMuseBaseUrl(config?.museBaseUrl), path = museRelativePath(baseUrl, value);
+  if (!path) throw new Error("Đường dẫn ảnh xem trước Muse không hợp lệ.");
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
+  let response;
+  try { response = await fetch(`${baseUrl}${path}`, { headers: { "X-API-Password": String(config.musePassword || "") }, credentials: "omit", redirect: "error", signal: controller.signal }); }
+  catch (error) { if (error?.name === "AbortError") throw new Error("Tải ảnh xem trước Muse quá thời gian chờ."); throw error; }
+  finally { clearTimeout(timer); }
+  if (response.status === 401) throw museHttpError(401, {});
+  if (!response.ok) throw new Error(`Không tải được ảnh xem trước Muse (HTTP ${response.status}).`);
+  const blob = await response.blob();
+  if (!blob.size || blob.size > 2_000_000 || !/^image\/(?:png|jpeg|webp|gif)$/i.test(blob.type)) throw new Error("Ảnh xem trước Muse không hợp lệ hoặc quá lớn.");
+  const bytes = new Uint8Array(await blob.arrayBuffer()); let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${blob.type};base64,${btoa(binary)}`;
+}
+async function handleMuseLibraryMessage(message, respond) {
+  const config = message.config || {};
+  try {
+    if (message.type === "MUSE_LIST_PROJECTS") {
+      const { data } = await museApiJson(config, "/api/projects");
+      if (!Array.isArray(data.projects)) throw new Error("Muse API không trả danh sách dự án hợp lệ.");
+      respond({ ok: true, projects: data.projects.filter(value => typeof value === "string").slice(0, 500) }); return;
+    }
+    if (message.type === "MUSE_CREATE_PROJECT") {
+      const name = String(message.name || "").trim().slice(0, 100);
+      if (!name) throw new Error("Nhập tên dự án trước.");
+      const { data } = await museApiJson(config, "/api/projects", "POST", { name });
+      if (typeof data.name !== "string" || !data.name.trim()) throw new Error("Muse API không trả tên dự án hợp lệ.");
+      respond({ ok: true, name: data.name }); return;
+    }
+    if (message.type === "MUSE_LIST_VIDEOS") {
+      const { baseUrl, data } = await museApiJson(config, "/api/videos");
+      const rawVideos = Array.isArray(data) ? data : data.videos;
+      if (!Array.isArray(rawVideos)) throw new Error("Muse API không trả danh sách video hợp lệ.");
+      const videos = rawVideos.slice(0, 1000).map(video => {
+        if (!video || (typeof video.id !== "string" && typeof video.id !== "number")) return null;
+        return { id: String(video.id).slice(0, 200), du_an: typeof video.du_an === "string" ? video.du_an : "",
+          title: String(video.name || video.filename || video.mo_ta || video.prompt || `Video ${video.id}`).slice(0, 200),
+          thumbPath: museRelativePath(baseUrl, video.thumb_url), videoPath: museRelativePath(baseUrl, video.video_url || video.video_path || video.file_url || video.url || video.path, "mp4"),
+          duration: Number.isFinite(Number(video.duration)) ? Number(video.duration) : null };
+      }).filter(Boolean);
+      respond({ ok: true, videos }); return;
+    }
+    if (message.type === "MUSE_MOVE_VIDEO") {
+      const id = String(message.videoId || "");
+      if (!id || id.length > 200) throw new Error("ID video không hợp lệ.");
+      const project = message.project == null || message.project === "" ? null : U.cleanMuseProject(message.project);
+      const { data } = await museApiJson(config, `/api/videos/${encodeURIComponent(id)}/move`, "POST", { du_an: project });
+      respond({ ok: true, data }); return;
+    }
+    if (message.type === "MUSE_GET_THUMBNAIL") {
+      respond({ ok: true, dataUrl: await museThumbnailDataUrl(config, message.thumbPath) }); return;
+    }
+    if (message.type === "MUSE_DOWNLOAD_LIBRARY_VIDEO") {
+      const baseUrl = U.normalizeMuseBaseUrl(config.museBaseUrl), videoPath = museRelativePath(baseUrl, message.videoPath, "mp4");
+      if (!videoPath) throw new Error("Đường dẫn video Muse không hợp lệ.");
+      await downloadMuseVideo(baseUrl, String(config.musePassword || ""), videoPath, String(message.filename || "video.mp4"), { controller: new AbortController(), reason: "" });
+      respond({ ok: true }); return;
+    }
+  } catch (error) { respond({ ok: false, error: error?.message || "Không thực hiện được thao tác Muse API." }); }
 }
 async function runQueue(run, config, startIndex) {
   const muse = run.provider === "muse";
@@ -352,7 +441,7 @@ async function runQueue(run, config, startIndex) {
     run.port?.disconnect(); run.finished = true;
     if (muse) await chrome.offscreen.closeDocument().catch(() => {});
     await chrome.storage.local.set({ queueState: { version: 1, provider: run.provider, mediaType: run.mediaType,
-      prompts: run.items.map(item => item.prompt), items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })), updatedAt: Date.now() } }).catch(() => {});
+      prompts: run.items.map(item => item.prompt), items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}), ...(item.project ? { project: item.project } : {}) })), updatedAt: Date.now() } }).catch(() => {});
     chrome.runtime.sendMessage({ type: "QUEUE_UPDATE", running: false, state: run.state, status: run.status, error: run.error || "" }).catch(() => {});
     if (activeRun === run) activeRun = null;
   }
@@ -378,8 +467,12 @@ function handlePanelMessage(message, respond) {
     const saved = data.queueState;
     const sameQueue = saved?.version === 1 && saved.provider === config.provider && saved.mediaType === config.mediaType &&
       JSON.stringify(saved.prompts) === JSON.stringify(config.prompts) && Array.isArray(saved.items) && saved.items.length === config.prompts.length;
-    const items = sameQueue ? config.prompts.map((prompt, index) => ({ prompt, status: saved.items[index]?.status || "pending", detail: saved.items[index]?.detail || "", ...(saved.items[index]?.taskId ? { taskId: saved.items[index].taskId } : {}) }))
-      : config.prompts.map(prompt => ({ prompt, status: "pending", detail: "" }));
+    const items = config.prompts.map((prompt, index) => {
+      const savedItem = sameQueue ? saved.items[index] : {};
+      const project = config.provider === "muse" ? U.cleanMuseProject(message.itemProjects?.[index] ?? savedItem?.project) : "";
+      return { prompt, status: sameQueue ? (savedItem?.status || "pending") : "pending", detail: sameQueue ? (savedItem?.detail || "") : "",
+        ...(savedItem?.taskId ? { taskId: savedItem.taskId } : {}), ...(project ? { project } : {}) };
+    });
     // A value explicitly entered in the panel is one-based. It intentionally
     // restarts from that item, while blank keeps the normal resume behavior.
     let normalizedStart;
@@ -407,6 +500,10 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionPrefix)) return;
   if (message?.type === "MUSE_TEST_CONNECTION") {
     testMuseConnection(message.config).then(respond).catch(error => respond({ ok: false, error: error?.message || "Không kiểm tra được Muse API." }));
+    return true;
+  }
+  if (["MUSE_LIST_PROJECTS", "MUSE_CREATE_PROJECT", "MUSE_LIST_VIDEOS", "MUSE_MOVE_VIDEO", "MUSE_GET_THUMBNAIL", "MUSE_DOWNLOAD_LIBRARY_VIDEO"].includes(message?.type)) {
+    void handleMuseLibraryMessage(message, respond);
     return true;
   }
   if (handlePanelMessage(message, respond)) return true;

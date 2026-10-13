@@ -33,6 +33,10 @@ test('Muse tạo body API, kiểm tra poll và nối task tuần tự', () => {
   assert.deepEqual(U.buildMuseVideoBody(' cảnh 2 ', '9:16', 15, 'task-1'), {
     mo_ta: 'cảnh 2', khung_hinh: '9:16', so_giay: 15, tiep_noi_video_id: 'task-1'
   });
+  assert.deepEqual(U.buildMuseVideoBody('cảnh dự án', '16:9', 10, '', 'du_an_cao'), {
+    mo_ta: 'cảnh dự án', khung_hinh: '16:9', so_giay: 10, du_an: 'du_an_cao'
+  });
+  assert.deepEqual(U.buildMuseVideoBody('cảnh gốc', '16:9', 10, '', '  '), { mo_ta: 'cảnh gốc', khung_hinh: '16:9', so_giay: 10 });
   assert.throws(() => U.buildMuseVideoBody('  '));
   assert.throws(() => U.buildMuseVideoBody('cảnh', '4:3'));
   assert.throws(() => U.buildMuseVideoBody('cảnh', '16:9', 16));
@@ -135,6 +139,38 @@ test('Worker chỉ nhận điều khiển hàng đợi từ panel extension', as
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(status.ok, true); assert.equal(status.running, false); assert.equal(status.state, null);
 });
+test('Muse project and library actions use authenticated API routes and only accept same-host media', async () => {
+  const onMessage = event(), requests = [];
+  const context = { FlowUtils: U, importScripts() {}, AbortController, setTimeout, clearTimeout, URL, Blob, Uint8Array, btoa,
+    fetch: async (url, options = {}) => {
+      requests.push({ url, options });
+      if (url.endsWith('/api/projects') && options.method === 'GET') return { ok: true, status: 200, json: async () => ({ projects: ['du_an_cao'] }) };
+      if (url.endsWith('/api/projects')) return { ok: true, status: 200, json: async () => ({ name: 'du_an_moi' }) };
+      if (url.endsWith('/api/videos') && options.method === 'GET') return { ok: true, status: 200, json: async () => ({ videos: [
+        { id: 'vid-1', du_an: 'du_an_cao', thumb_url: '/results/thumb.png', video_url: '/results/clip.mp4' },
+        { id: 'vid-2', thumb_url: '/results/thumb.png', video_url: 'https://outside.test/clip.mp4' }
+      ] }) };
+      if (url.endsWith('/api/videos/vid-1/move')) return { ok: true, status: 200, json: async () => ({ du_an: null }) };
+      if (url.endsWith('/results/thumb.png')) return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }) };
+      throw new Error(`Unexpected Muse URL ${url}`);
+    },
+    chrome: { runtime: { id: 'test', getURL: file => `chrome-extension://test/${file}`, onMessage, onInstalled: event(), sendMessage: async () => {} },
+      sidePanel: { setPanelBehavior: async () => {} }, storage: { local: { setAccessLevel: async () => {}, get: async () => ({}), set: async () => {} } } }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
+  const send = message => new Promise(resolve => onMessage.emit({ ...message, config: { museBaseUrl: U.defaultMuseBaseUrl, musePassword: 'pw' } },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
+  assert.deepEqual((await send({ type: 'MUSE_LIST_PROJECTS' })).projects, ['du_an_cao']);
+  assert.equal((await send({ type: 'MUSE_CREATE_PROJECT', name: '  du_an_moi  ' })).name, 'du_an_moi');
+  const videos = await send({ type: 'MUSE_LIST_VIDEOS' });
+  assert.equal(videos.videos[0].videoPath, '/results/clip.mp4');
+  assert.equal(videos.videos[1].videoPath, '');
+  assert.equal((await send({ type: 'MUSE_MOVE_VIDEO', videoId: 'vid-1', project: null })).ok, true);
+  const thumb = await send({ type: 'MUSE_GET_THUMBNAIL', thumbPath: '/results/thumb.png' });
+  assert.match(thumb.dataUrl, /^data:image\/png;base64,/);
+  assert.ok(requests.every(request => request.options.headers['X-API-Password'] === 'pw'));
+  assert.equal(JSON.parse(requests.find(request => request.url.endsWith('/api/videos/vid-1/move')).options.body).du_an, null);
+});
 test('Worker starts at a selected prompt and downloads the rest without a sidepanel connection', async () => {
   const onMessage = event(), downloadChanged = event();
   const stored = {};
@@ -199,16 +235,16 @@ test('Muse worker tạo video tuần tự, nối task trước, tải có xác t
     }
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
-  const config = { ...U.defaults, provider: 'muse', mediaType: 'video', prompts: 'cảnh 1\ncảnh 2', musePassword: 'pw',
+  const config = { ...U.defaults, provider: 'muse', mediaType: 'video', prompts: 'cảnh 1\ncảnh 2', musePassword: 'pw', museProject: 'du_an_chung',
     museAutoChain: true, museFrame: '9:16', museSeconds: '12', delayMin: '0', delayMax: '0' };
-  const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config },
+  const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config, itemProjects: ['du_an_rieng', ''] },
     { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
   assert.equal(started.ok, true);
   for (let i = 0; i < 100 && stored.queueState?.items?.filter(item => item.status === 'done').length !== 2; i++) await new Promise(resolve => setTimeout(resolve, 10));
   const creates = requests.filter(request => request.url.endsWith('/api/video'));
   assert.deepEqual(creates.map(request => JSON.parse(request.options.body)), [
-    { mo_ta: 'cảnh 1', khung_hinh: '9:16', so_giay: 12 },
-    { mo_ta: 'cảnh 2', khung_hinh: '9:16', so_giay: 12, tiep_noi_video_id: 'task-1' }
+    { mo_ta: 'cảnh 1', khung_hinh: '9:16', so_giay: 12, du_an: 'du_an_rieng' },
+    { mo_ta: 'cảnh 2', khung_hinh: '9:16', so_giay: 12, tiep_noi_video_id: 'task-1', du_an: 'du_an_chung' }
   ]);
   assert.equal(requests.filter(request => request.url.includes('/result/')).length, 2);
   assert.equal(downloadMessages.length, 2);

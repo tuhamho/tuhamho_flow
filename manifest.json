@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "tuhamho_flow — Flow, ChatGPT & Muse",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "minimum_chrome_version": "116",
   "description": "Chạy prompt trên Google Flow, ChatGPT hoặc Muse API. Dữ liệu lưu trên máy.",
   "permissions": ["sidePanel", "storage", "downloads", "offscreen"],
