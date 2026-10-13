@@ -1,5 +1,15 @@
 # tuhamho_flow
 
+## Ứng dụng Muse AI Studio cho Windows
+
+Thư mục `muse-app/` là ứng dụng desktop riêng cho Muse API, không cần extension, Chrome, tab web hoặc DOM automation. Để chạy từ mã nguồn trên Windows, cài Node.js LTS rồi chạy `npm install` và `npm run muse-app`. Lệnh cài đặt tự build native `keytar` cho Electron. Để tạo file portable `.exe`, chạy `npm run dist:muse`; file được tạo trong `dist/`.
+
+Ứng dụng hỗ trợ chỉnh sửa từng cảnh, dự án chung/riêng từng cảnh, thư viện video và chuyển dự án, 16:9/9:16, 5–15 giây, tự nối task trước, khoảng nghỉ và tên MP4 có số thứ tự. Queue được lưu cục bộ; khi mở lại, video đã xong được giữ nguyên và task đang tạo sẽ tiếp tục poll theo ID, không gửi lại prompt đó. Poll mỗi 5 giây, timeout mặc định 30 phút, lỗi mạng retry tối đa ba lần với backoff. Có thể chọn dừng hoặc bỏ qua cảnh lỗi.
+
+Mật khẩu được lưu qua `keytar` vào Windows Credential Manager (hoặc keychain tương ứng trên hệ điều hành khác); file cài đặt chỉ lưu thư mục tải. Mọi request API, thumbnail và tải MP4 đều gửi `X-API-Password`. Video được tải về bằng cách fetch có auth rồi lưu bytes; mặc định vào `Downloads/MuseAI`, hoặc thư mục con theo dự án nếu có chọn dự án. Base URL mặc định là `https://tuhamho-muse.serveousercontent.com` và có thể sửa trên giao diện. App hỗ trợ thức dậy sau Sleep/Hibernate và tiếp tục polling khi Windows chạy lại.
+
+Ứng dụng Electron yêu cầu máy Windows cho bản `.exe`; lần đầu chạy `npm install` cần kết nối mạng để lấy Electron và build helper `keytar`. Nếu Windows Firewall hỏi quyền mạng, cho phép app kết nối để gọi Muse API.
+
 Tiện ích Chrome Manifest V3 có giao diện tiếng Việt mang tên tuhamho_flow. Tiện ích chạy lần lượt prompt trên Google Flow, ChatGPT hoặc Muse API rồi lưu kết quả vào thư mục con trong Downloads. Muse tạo video trực tiếp qua REST API và không cần mở tab dịch vụ. Người dùng không cần cài thư viện, tự chạy máy chủ cục bộ hoặc thực hiện bước build.
 
 Giao diện tối màu đen, xanh dương và cyan, có logo và hàng đợi. Icon extension và logo panel được tạo từ ảnh `AppIcon-1024.png` do người dùng cung cấp, ở các kích thước 16, 48 và 128 pixel. Chọn **Google Flow**, **ChatGPT** hoặc **Muse API** trên panel. ChatGPT chỉ tạo ảnh; Flow hỗ trợ ảnh/video; Muse tạo video trực tiếp. Flow và ChatGPT điều khiển giao diện tab bằng content script; Muse chỉ dùng REST API trong tiến trình nền, không cần tab hoặc DOM automation.

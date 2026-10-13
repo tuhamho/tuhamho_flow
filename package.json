@@ -1,13 +1,44 @@
 {
-  "name": "tuhamho-flow-extension-tests",
-  "version": "1.7.0",
+  "name": "tuhamho-muse-ai-studio",
+  "version": "1.0.0",
   "private": true,
+  "main": "muse-app/main.js",
   "scripts": {
     "test": "node --test tests/core.test.cjs",
     "test:browser": "node --test tests/browser.test.cjs",
-    "test:muse-ui": "node tests/muse-ui.test.cjs"
+    "test:muse-ui": "node tests/muse-ui.test.cjs",
+    "test:muse-app": "node tests/muse-app.test.cjs",
+    "muse-app": "electron muse-app/main.js",
+    "dist:muse": "electron-builder --win portable",
+    "postinstall": "electron-rebuild -f -w keytar"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^39.8.10",
+    "electron-builder": "^26.15.3",
     "playwright": "^1.63.0"
-  }
+  },
+  "dependencies": {
+    "keytar": "^7.9.0"
+  },
+  "build": {
+    "appId": "com.tuhamho.museaistudio",
+    "productName": "Muse AI Studio",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "muse-app/**/*",
+      "shared.js",
+      "node_modules/keytar/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "Muse-AI-Studio-${version}-Windows.${ext}"
+    }
+  },
+  "description": "Ứng dụng desktop độc lập để tạo video qua Muse API"
 }

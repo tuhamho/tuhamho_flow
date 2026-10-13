@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Muse AI Studio</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar"><div class="brand-mark">M</div><div><h1>Muse AI Studio</h1><p>Tạo video theo cảnh · chạy trực tiếp qua Muse API</p></div><span id="connection" class="connection">Chưa kết nối</span></header>
+  <main class="layout">
+    <section class="workspace">
+      <section class="card settings">
+        <div class="section-title"><div><h2>Kết nối Muse</h2><p>Mật khẩu được bảo vệ bằng mã hóa của Windows.</p></div><button id="testConnection" class="button ghost">Kiểm tra kết nối</button></div>
+        <div class="grid connection-fields"><label>API base URL<input id="baseUrl" type="url" value="https://tuhamho-muse.serveousercontent.com"></label><label>Mật khẩu API<input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu API"></label></div>
+        <div id="message" class="message" role="status"></div>
+      </section>
+      <section class="card prompts">
+        <div class="section-title"><div><h2>Danh sách cảnh</h2><p>Nhập “CẢNH 1:” hoặc cách cảnh bằng một dòng trống. Có thể sửa từng cảnh bên dưới.</p></div><button id="addScene" class="button ghost">＋ Thêm cảnh</button></div>
+        <textarea id="promptSource" class="source" placeholder="CẢNH 1:\nMô tả cảnh đầu tiên...\n\nCẢNH 2:\nMô tả cảnh tiếp theo..."></textarea>
+        <div class="scene-heading"><h3>Chỉnh prompt từng cảnh</h3><span id="sceneCount">0 cảnh</span></div>
+        <div id="sceneList" class="scene-list"></div>
+      </section>
+      <section class="card controls">
+        <div class="section-title"><div><h2>Cài đặt video</h2><p>Hàng đợi chạy lần lượt; có thể dừng bất kỳ lúc nào.</p></div></div>
+        <div class="grid options">
+          <label>Dự án chung<select id="project"><option value="">Không chọn dự án</option></select></label>
+          <button id="newProject" class="button ghost align-end">＋ Dự án mới</button>
+          <label>Khung hình<select id="frame"><option>16:9</option><option>9:16</option></select></label>
+          <label>Thời lượng (giây)<input id="seconds" type="number" min="5" max="15" value="10"></label>
+          <label>Timeout mỗi cảnh (phút)<input id="timeout" type="number" min="1" max="60" value="30"></label>
+          <label>Nghỉ giữa video (giây)<div class="inline"><input id="delayMin" type="number" min="0" value="5"><span>đến</span><input id="delayMax" type="number" min="0" value="15"></div></label>
+          <label>Tên file<input id="filenameBase" value="tuhamho"></label>
+          <label class="check-row"><input id="serial" type="checkbox" checked> Đánh số file (001_, 002_…)</label>
+          <label class="check-row wide"><input id="autoChain" type="checkbox" checked> Tự động nối cảnh sau vào video trước</label>
+          <label>Gặp lỗi video<select id="errorMode"><option value="stop">Dừng hàng đợi</option><option value="skip">Bỏ cảnh lỗi và tiếp tục</option></select></label>
+        </div>
+        <div class="folder-row"><div><span class="label">Thư mục lưu</span><p id="folderPath" class="path">Downloads / MuseAI</p></div><button id="chooseFolder" class="button ghost">Chọn thư mục</button></div>
+        <div class="actions"><button id="start" class="button primary">Bắt đầu tạo video</button><button id="stop" class="button danger" disabled>Dừng</button></div>
+      </section>
+      <section class="card queue-card"><div class="section-title"><div><h2>Hàng đợi</h2><p id="queueStatus">Chưa chạy.</p></div><span id="queueCount" class="pill">0 / 0</span></div><div class="progress"><span id="progressBar"></span></div><div id="queueList" class="queue-list"></div></section>
+    </section>
+    <aside class="card library"><div class="section-title"><div><h2>Thư viện Muse</h2><p>Video đã tạo trên tài khoản Muse.</p></div><button id="refreshLibrary" class="button ghost">Làm mới</button></div><div id="libraryStatus" class="subtle">Nhấn “Làm mới” để tải danh sách.</div><div id="libraryList" class="library-list"></div></aside>
+  </main>
+  <script src="../shared.js"></script><script src="renderer.js"></script>
+</body></html>
