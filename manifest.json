@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "tuhamho_flow — Flow & ChatGPT",
-  "version": "1.5.28",
+  "name": "tuhamho_flow — Flow, ChatGPT & Muse",
+  "version": "1.6.0",
   "minimum_chrome_version": "116",
-  "description": "Chạy prompt tạo ảnh trên ChatGPT hoặc ảnh/video trên Google Flow. Dữ liệu lưu trên máy.",
-  "permissions": ["sidePanel", "storage", "downloads"],
-  "host_permissions": ["https://labs.google/*", "https://flow.google.com/*", "https://chatgpt.com/*"],
+  "description": "Chạy prompt trên Google Flow, ChatGPT hoặc Muse API. Dữ liệu lưu trên máy.",
+  "permissions": ["sidePanel", "storage", "downloads", "offscreen"],
+  "host_permissions": ["https://labs.google/*", "https://flow.google.com/*", "https://chatgpt.com/*", "https://tuhamho-muse.serveousercontent.com/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Mở tuhamho_flow", "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" } },
   "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
@@ -22,6 +22,6 @@
     "all_frames": false
   }],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; base-uri 'none'; form-action 'none'"
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://tuhamho-muse.serveousercontent.com; img-src 'self' data: blob:; style-src 'self'; base-uri 'none'; form-action 'none'"
   }
 }

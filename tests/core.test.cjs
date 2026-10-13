@@ -28,6 +28,30 @@ test('ChatGPT chỉ nhận origin chính xác và URL ảnh của OpenAI', () =>
   assert.equal(U.validate({ ...U.defaults, provider: 'chatgpt', mediaType: 'image', prompts: 'ảnh' }).provider, 'chatgpt');
   assert.throws(() => U.validate({ ...U.defaults, provider: 'chatgpt', mediaType: 'video', prompts: 'video' }));
 });
+test('Muse tạo body API, kiểm tra poll và nối task tuần tự', () => {
+  assert.deepEqual(U.buildMuseVideoBody('cảnh 1'), { mo_ta: 'cảnh 1', khung_hinh: '16:9', so_giay: 10 });
+  assert.deepEqual(U.buildMuseVideoBody(' cảnh 2 ', '9:16', 15, 'task-1'), {
+    mo_ta: 'cảnh 2', khung_hinh: '9:16', so_giay: 15, tiep_noi_video_id: 'task-1'
+  });
+  assert.throws(() => U.buildMuseVideoBody('  '));
+  assert.throws(() => U.buildMuseVideoBody('cảnh', '4:3'));
+  assert.throws(() => U.buildMuseVideoBody('cảnh', '16:9', 16));
+  assert.deepEqual(U.parseMusePollResult({ status: 'pending' }), { status: 'pending' });
+  assert.deepEqual(U.parseMusePollResult({ status: 'ok', video_url: '/results/clip-1.mp4', duration: 8.4 }), {
+    status: 'ok', videoUrl: '/results/clip-1.mp4', duration: 8.4
+  });
+  assert.deepEqual(U.parseMusePollResult({ status: 'error', error: 'task failed' }), { status: 'error', error: 'task failed' });
+  assert.throws(() => U.parseMusePollResult({ status: 'ok', video_url: 'https://evil.test/clip.mp4', duration: 8 }));
+  assert.equal(U.museContinuationId(true, 'task-1', 1), 'task-1');
+  assert.equal(U.museContinuationId(false, 'task-1', 1), '');
+  assert.equal(U.museContinuationId(true, 'task-1', 0), '');
+  assert.equal(U.museContinuationId(true, '', 1), '');
+  assert.equal(U.normalizeMuseBaseUrl('https://muse.example.test/'), 'https://muse.example.test');
+  assert.throws(() => U.normalizeMuseBaseUrl('http://muse.example.test'));
+  assert.equal(U.validate({ ...U.defaults, provider: 'muse', mediaType: 'video', musePassword: 'secret', prompts: 'scene' }).provider, 'muse');
+  assert.throws(() => U.validate({ ...U.defaults, provider: 'muse', mediaType: 'image', musePassword: 'secret', prompts: 'scene' }));
+  assert.throws(() => U.validate({ ...U.defaults, provider: 'muse', mediaType: 'video', prompts: 'scene' }));
+});
 test('Tên tệp chặn traversal, ký tự điều khiển và tên thiết bị Windows', () => {
   for (const folder of ['../outside', '..\\..\\outside', 'C:\\Users\\test', '/', '.', 'CON', 'aux.png', 'COM1', 'lpt²', 'a\u0000b', 'x\u202ey', 'abc. ']) {
     const result = U.filename({ folder, serial: true }, 0, 'batch');
@@ -65,11 +89,12 @@ test('Giới hạn đầu vào và khoảng chờ', () => {
     assert.throws(() => U.validate({ ...valid, ...change }));
   }
 });
-test('Manifest chỉ có ba quyền, host tối thiểu Flow/ChatGPT, tài nguyên đều cục bộ', () => {
+test('Manifest giới hạn quyền và host đúng Flow/ChatGPT/Muse, tài nguyên đều cục bộ', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   assert.equal(manifest.manifest_version, 3);
-  assert.deepEqual(manifest.permissions, ['sidePanel', 'storage', 'downloads']);
-  assert.deepEqual(manifest.host_permissions, ['https://labs.google/*', 'https://flow.google.com/*', 'https://chatgpt.com/*']);
+  assert.deepEqual(manifest.permissions, ['sidePanel', 'storage', 'downloads', 'offscreen']);
+  assert.deepEqual(manifest.host_permissions, ['https://labs.google/*', 'https://flow.google.com/*', 'https://chatgpt.com/*', 'https://tuhamho-muse.serveousercontent.com/*']);
+  assert.match(manifest.content_security_policy.extension_pages, /connect-src https:\/\/tuhamho-muse\.serveousercontent\.com/);
   for (const script of [manifest.background.service_worker, ...manifest.content_scripts.flatMap(entry => entry.js), 'shared.js', 'sidepanel.js']) {
     const source = fs.readFileSync(path.join(root, script), 'utf8');
     assert.ok(!/\b(?:eval|XMLHttpRequest|WebSocket)\s*\(|new\s+Function\s*\(|chrome\.(?:cookies|history|debugger|webRequest)\b|innerHTML\s*=|console\./.test(source), script);
@@ -131,6 +156,54 @@ test('Worker starts at a selected prompt and downloads the rest without a sidepa
   assert.deepEqual(promptsSent, ['giữa', 'cuối']);
   assert.equal(downloads.length, 2);
   assert.deepEqual(stored.queueState.items.map(item => item.status), ['skipped', 'done', 'done']);
+});
+test('Muse worker tạo video tuần tự, nối task trước, tải có xác thực và không đụng tab', async () => {
+  const onMessage = event(), stored = {}, requests = [], downloadMessages = [], updates = [];
+  let createIndex = 0;
+  const context = { FlowUtils: U, importScripts() {}, crypto: require('node:crypto').webcrypto, AbortController,
+    setTimeout, clearTimeout, setInterval, clearInterval, Date, Math,
+    fetch: async (url, options = {}) => {
+      requests.push({ url, options });
+      if (url.endsWith('/api/video')) {
+        const body = JSON.parse(options.body);
+        assert.equal(options.headers['X-API-Password'], 'pw');
+        assert.equal(options.credentials, 'omit');
+        return { ok: true, status: 200, json: async () => ({ id: `task-${++createIndex}` }), body };
+      }
+      assert.match(url, /\/api\/video\/result\/task-\d+$/);
+      assert.equal(options.headers['X-API-Password'], 'pw');
+      return { ok: true, status: 200, json: async () => ({ status: 'ok', video_url: '/results/clip.mp4', duration: 8 }) };
+    },
+    chrome: {
+      runtime: { id: 'test', getURL: file => `chrome-extension://test/${file}`, onMessage, onInstalled: event(),
+        sendMessage: async message => {
+          updates.push(message);
+          if (message.type === 'MUSE_DOWNLOAD_VIDEO') { downloadMessages.push(message); return { ok: true }; }
+        }, getContexts: async () => [] },
+      sidePanel: { setPanelBehavior: async () => {} },
+      offscreen: { createDocument: async () => {}, closeDocument: async () => {} },
+      storage: { local: { setAccessLevel: async () => {}, get: async () => ({ queueState: stored.queueState }), set: async value => Object.assign(stored, value) } },
+      tabs: { get: async () => { throw new Error('Muse must not inspect tabs'); }, sendMessage: async () => { throw new Error('Muse must not message tabs'); }, connect: () => { throw new Error('Muse must not connect tabs'); } }
+    }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);
+  const config = { ...U.defaults, provider: 'muse', mediaType: 'video', prompts: 'cảnh 1\ncảnh 2', musePassword: 'pw',
+    museAutoChain: true, museFrame: '9:16', museSeconds: '12', delayMin: '0', delayMax: '0' };
+  const started = await new Promise(resolve => onMessage.emit({ type: 'START_QUEUE', config },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, resolve));
+  assert.equal(started.ok, true);
+  for (let i = 0; i < 100 && stored.queueState?.items?.filter(item => item.status === 'done').length !== 2; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  const creates = requests.filter(request => request.url.endsWith('/api/video'));
+  assert.deepEqual(creates.map(request => JSON.parse(request.options.body)), [
+    { mo_ta: 'cảnh 1', khung_hinh: '9:16', so_giay: 12 },
+    { mo_ta: 'cảnh 2', khung_hinh: '9:16', so_giay: 12, tiep_noi_video_id: 'task-1' }
+  ]);
+  assert.equal(requests.filter(request => request.url.includes('/result/')).length, 2);
+  assert.equal(downloadMessages.length, 2);
+  assert.equal(downloadMessages[0].filename, 'tuhamho_flow/001_tuhamho.mp4');
+  assert.deepEqual(stored.queueState.items.map(item => item.status), ['done', 'done']);
+  assert.match(stored.queueState.items[0].detail, /8 giây/);
+  assert.ok(updates.some(update => /Đang tạo cảnh 2\/2/.test(update.status || '')));
 });
 test('ChatGPT uses the chosen interval, waits after cancelling, retries that prompt, and continues', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [], updates = [];

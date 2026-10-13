@@ -2,7 +2,7 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabLabel", "mediaType", "mediaHint", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabBlock", "tabLabel", "mediaType", "mediaHint", "museSettings", "museOptions", "museBaseUrl", "musePassword", "museTest", "museTestStatus", "museFrame", "museSeconds", "museAutoChain", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
 const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
@@ -11,7 +11,8 @@ let saveTail = Promise.resolve();
 function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !text; }
 function settings() {
   return { prompts: ui.prompts.value, folder: ui.folder.value, filenameBase: ui.filenameBase.value, serial: ui.serial.checked, provider: ui.provider.value, mediaType: ui.mediaType.value,
-    startFrom: ui.startFrom.value, batchEvery: ui.batchEvery.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value };
+    startFrom: ui.startFrom.value, batchEvery: ui.batchEvery.value, delayMin: ui.delayMin.value, delayMax: ui.delayMax.value, timeout: ui.timeout.value,
+    museBaseUrl: ui.museBaseUrl.value, musePassword: ui.musePassword.value, museFrame: ui.museFrame.value, museSeconds: ui.museSeconds.value, museAutoChain: ui.museAutoChain.checked };
 }
 function queueMatchesCurrent() {
   return Boolean(queueMeta && queueMeta.provider === ui.provider.value && queueMeta.mediaType === ui.mediaType.value &&
@@ -28,7 +29,7 @@ function persistQueueState() {
   if (!items.length || !queueMeta) return chrome.storage.local.remove("queueState");
   return chrome.storage.local.set({ queueState: {
     version: 1, provider: queueMeta.provider, mediaType: queueMeta.mediaType,
-    prompts: items.map(item => item.prompt), items: items.map(item => ({ status: item.status, detail: item.detail })),
+    prompts: items.map(item => item.prompt), items: items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })),
     updatedAt: Date.now()
   } });
 }
@@ -38,15 +39,23 @@ function preview() {
   ui.startFrom.max = String(Math.max(1, promptCount));
   const video = ui.mediaType.value === "video";
   const chatgpt = ui.provider.value === "chatgpt";
-  ui.mediaBlock.hidden = chatgpt;
-  ui.mediaType.disabled = chatgpt;
+  const muse = ui.provider.value === "muse";
+  ui.mediaBlock.hidden = chatgpt || muse;
+  ui.mediaType.disabled = chatgpt || muse;
   ui.batchBlock.hidden = !chatgpt;
-  ui.providerHint.textContent = chatgpt
+  ui.museSettings.hidden = !muse;
+  ui.museOptions.hidden = !muse;
+  ui.tabBlock.hidden = muse;
+  ui.providerHint.textContent = muse
+    ? "Tạo video trực tiếp qua Muse API, không cần mở tab dịch vụ. Mật khẩu được lưu trong chrome.storage.local trên máy này."
+    : chatgpt
     ? "ChatGPT tạo ảnh qua giao diện web; mỗi tin nhắn có dòng Số thứ tự để bạn đối chiếu. Dòng này có thể ảnh hưởng đôi chút đến cách mô hình hiểu prompt."
     : "Mở dự án Google Flow và chọn đúng tab ở phần tùy chọn.";
   ui.tabLabel.textContent = chatgpt ? "Tab ChatGPT" : "Tab Google Flow";
   ui.flowTab.setAttribute("aria-label", chatgpt ? "Tab ChatGPT cần điều khiển" : "Tab Flow cần điều khiển");
-  ui.tip.textContent = chatgpt
+  ui.tip.textContent = muse
+    ? "💡 Muse API tạo video tuần tự; mỗi video có thể mất vài phút. Đặt timeout đủ dài. Có thể đóng panel, hàng đợi tiếp tục trong tiến trình nền."
+    : chatgpt
     ? `💡 ChatGPT: cứ sau mỗi ${ui.batchEvery.value || 10} prompt, tiện ích tự bấm Dừng, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó để lưu ảnh trước khi tiếp tục. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.`
     : "💡 Chọn đúng tab Google Flow và loại Ảnh/Video; mỗi lượt chỉ tạo 1 kết quả. Có thể đóng panel hoặc chuyển tab sau khi bấm Bắt đầu. Muốn bỏ Save As: tắt ‘Hỏi vị trí lưu từng tệp’ trong Cài đặt Chrome > Tệp đã tải xuống.";
   const sampleExt = video ? ".mp4 hoặc .webm" : ".png, .jpg hoặc .webp";
@@ -54,7 +63,9 @@ function preview() {
     ? `${ui.serial.checked ? "001_" : ""}${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}`
     : `${ui.serial.checked ? "001_" : ""}tên-ảnh_${U.safeSegment(ui.filenameBase.value, "tuhamho")}${ui.serial.checked ? "" : "-mã-lượt"}`;
   ui.folderPreview.textContent = `Downloads / ${U.safeSegment(ui.folder.value)} / ${fileStem}${sampleExt}`;
-  ui.mediaHint.textContent = video
+  ui.mediaHint.textContent = muse
+    ? "Muse tạo video trực tiếp qua API; không dùng tab trình duyệt."
+    : video
     ? "Chờ video thật sẵn sàng, không lấy ảnh thumbnail. Nên tăng thời gian chờ trong Tùy chọn bổ sung."
     : "Chọn Ảnh khi Flow đang tạo ảnh. Không dùng ảnh thumbnail của video làm kết quả.";
   updateStartLabel();
@@ -90,7 +101,8 @@ function render() {
 function applyQueueUpdate(update) {
   if (!update?.state || update.state.version !== 1 || !Array.isArray(update.state.prompts) || !Array.isArray(update.state.items)) return;
   queueMeta = { provider: update.state.provider, mediaType: update.state.mediaType, prompts: update.state.prompts };
-  items = update.state.prompts.map((prompt, index) => ({ prompt, status: update.state.items[index]?.status || "pending", detail: update.state.items[index]?.detail || "" }));
+  items = update.state.prompts.map((prompt, index) => ({ prompt, status: update.state.items[index]?.status || "pending", detail: update.state.items[index]?.detail || "",
+    ...(update.state.items[index]?.taskId ? { taskId: update.state.items[index].taskId } : {}) }));
   currentRun = update.running ? { background: true } : null;
   toggleRunning(Boolean(currentRun)); render();
   ui.status.textContent = update.status || (currentRun ? "Hàng đợi đang chạy nền." : "");
@@ -116,6 +128,9 @@ async function ping(tabId, provider = "flow") {
 }
 async function refreshTabs() {
   if (currentRun || refreshing) return;
+  if (ui.provider.value === "muse") {
+    ui.connection.textContent = "Muse API không cần tab trình duyệt."; ui.connection.className = "ok"; return;
+  }
   refreshing = true;
   try {
     const previous = ui.flowTab.value;
@@ -151,12 +166,13 @@ async function start(event) {
     if ([ui.delayMin, ui.delayMax, ui.timeout].some(input => input.value.trim() === "")) throw new Error("Hãy nhập đủ thời gian nghỉ và thời gian chờ.");
     config = U.validate(settings());
   } catch (error) { showError(error.message); return; }
-  if (!Number.isInteger(Number(ui.flowTab.value))) { showError("Chưa chọn tab dịch vụ. Bấm Làm mới rồi chọn tab đang mở."); return; }
+  const muse = ui.provider.value === "muse";
+  if (!muse && !Number.isInteger(Number(ui.flowTab.value))) { showError("Chưa chọn tab dịch vụ. Bấm Làm mới rồi chọn tab đang mở."); return; }
   currentRun = { background: true }; toggleRunning(true);
   ui.status.textContent = "Đang chuyển hàng đợi sang chạy nền…";
   try {
     clearTimeout(saveTimer); await saveSettings();
-    const response = await chrome.runtime.sendMessage({ type: "START_QUEUE", config: settings(), tabId: Number(ui.flowTab.value) });
+    const response = await chrome.runtime.sendMessage({ type: "START_QUEUE", config: settings(), ...(muse ? {} : { tabId: Number(ui.flowTab.value) }) });
     if (!response?.ok) throw new Error(response?.error || "Không khởi chạy được hàng đợi nền.");
   } catch (error) {
     currentRun = null; toggleRunning(false); showError(error.message || "Không kết nối được với tiến trình nền.");
@@ -178,7 +194,20 @@ ui.mediaType.addEventListener("change", () => {
 });
 ui.provider.addEventListener("change", () => {
   if (ui.provider.value === "chatgpt") ui.mediaType.value = "image";
+  if (ui.provider.value === "muse") { ui.mediaType.value = "video"; if (Number(ui.timeout.value) === 240) ui.timeout.value = "600"; }
   scheduleSave(); void refreshTabs();
+});
+ui.museTest.addEventListener("click", async () => {
+  ui.museTest.disabled = true; ui.museTestStatus.textContent = "Đang kiểm tra Muse API…"; showError();
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "MUSE_TEST_CONNECTION", config: {
+      museBaseUrl: ui.museBaseUrl.value, musePassword: ui.musePassword.value
+    } });
+    ui.museTestStatus.textContent = response?.status || response?.error || "Không nhận được phản hồi kiểm tra.";
+    ui.museTestStatus.classList.toggle("success", Boolean(response?.ok));
+    if (!response?.ok) showError(response?.error || "Không kiểm tra được Muse API.");
+  } catch (error) { ui.museTestStatus.textContent = ""; showError(error.message || "Không kiểm tra được Muse API."); }
+  finally { ui.museTest.disabled = false; }
 });
 ui.refresh.addEventListener("click", refreshTabs);
 ui.flowTab.addEventListener("change", refreshTabs);
@@ -213,11 +242,17 @@ ui.clear.addEventListener("click", async () => {
     }
     ui.serial.checked = typeof restored.serial === "boolean" ? restored.serial : U.defaults.serial;
     ui.mediaType.value = ["image", "video"].includes(restored.mediaType) ? restored.mediaType : "image";
-    ui.provider.value = restored.provider === "chatgpt" ? "chatgpt" : "flow";
+    ui.provider.value = ["flow", "chatgpt", "muse"].includes(restored.provider) ? restored.provider : "flow";
     if (ui.provider.value === "chatgpt") ui.mediaType.value = "image";
+    if (ui.provider.value === "muse") ui.mediaType.value = "video";
+    ui.museBaseUrl.value = typeof restored.museBaseUrl === "string" ? restored.museBaseUrl : U.defaultMuseBaseUrl;
+    ui.musePassword.value = typeof restored.musePassword === "string" ? restored.musePassword : "";
+    ui.museFrame.value = ["16:9", "9:16"].includes(restored.museFrame) ? restored.museFrame : "16:9";
+    ui.museSeconds.value = Number.isInteger(Number(restored.museSeconds)) && Number(restored.museSeconds) >= 5 && Number(restored.museSeconds) <= 15 ? String(restored.museSeconds) : "10";
+    ui.museAutoChain.checked = typeof restored.museAutoChain === "boolean" ? restored.museAutoChain : true;
     const state = data.queueState;
     const restoredPrompts = U.parsePrompts(ui.prompts.value);
-    if (state?.version === 1 && ["flow", "chatgpt"].includes(state.provider) && ["image", "video"].includes(state.mediaType) &&
+    if (state?.version === 1 && ["flow", "chatgpt", "muse"].includes(state.provider) && ["image", "video"].includes(state.mediaType) &&
         state.provider === ui.provider.value && state.mediaType === ui.mediaType.value &&
         JSON.stringify(state.prompts) === JSON.stringify(restoredPrompts) && Array.isArray(state.items) && state.items.length === restoredPrompts.length) {
       queueMeta = { provider: state.provider, mediaType: state.mediaType, prompts: restoredPrompts };
@@ -225,7 +260,7 @@ ui.clear.addEventListener("click", async () => {
         const saved = state.items[index] || {};
         const status = ["pending", "typing", "generating", "downloading", "done", "skipped", "stopped", "error", "timeout"].includes(saved.status) ? saved.status : "pending";
         const interrupted = ["typing", "generating", "downloading"].includes(status);
-        return { prompt, status: interrupted ? "stopped" : status,
+        return { prompt, status: interrupted ? "stopped" : status, ...(saved.taskId ? { taskId: saved.taskId } : {}),
           detail: interrupted ? "Panel đã đóng khi mục này đang chạy. Kiểm tra tab dịch vụ trước khi tiếp tục." : String(saved.detail || "") };
       });
     }

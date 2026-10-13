@@ -1,8 +1,8 @@
 # tuhamho_flow
 
-Tiện ích Chrome Manifest V3 có giao diện tiếng Việt mang tên tuhamho_flow. Tiện ích chạy lần lượt prompt tạo ảnh trên ChatGPT hoặc prompt ảnh/video trên Google Flow, rồi lưu kết quả vào thư mục con trong thư mục tải xuống của Chrome. Không cần cài thư viện, chạy máy chủ hoặc thực hiện bước build.
+Tiện ích Chrome Manifest V3 có giao diện tiếng Việt mang tên tuhamho_flow. Tiện ích chạy lần lượt prompt trên Google Flow, ChatGPT hoặc Muse API rồi lưu kết quả vào thư mục con trong Downloads. Muse tạo video trực tiếp qua REST API và không cần mở tab dịch vụ. Người dùng không cần cài thư viện, tự chạy máy chủ cục bộ hoặc thực hiện bước build.
 
-Giao diện dùng nền tối tím, logo và hàng đợi. Icon extension và logo panel được tạo từ ảnh `AppIcon-1024.png` do người dùng cung cấp, ở các kích thước 16, 48 và 128 pixel. Chọn **Google Flow** hoặc **ChatGPT** trên panel. ChatGPT hiện chỉ tạo ảnh; Flow hỗ trợ ảnh/video. Chọn tab và thời gian chờ trong **Tùy chọn bổ sung**. Tiện ích dùng DOM, không dùng debugger.
+Giao diện tối màu đen, xanh dương và cyan, có logo và hàng đợi. Icon extension và logo panel được tạo từ ảnh `AppIcon-1024.png` do người dùng cung cấp, ở các kích thước 16, 48 và 128 pixel. Chọn **Google Flow**, **ChatGPT** hoặc **Muse API** trên panel. ChatGPT chỉ tạo ảnh; Flow hỗ trợ ảnh/video; Muse tạo video trực tiếp. Flow và ChatGPT điều khiển giao diện tab bằng content script; Muse chỉ dùng REST API trong tiến trình nền, không cần tab hoặc DOM automation.
 
 ## Cài ở chế độ nhà phát triển
 
@@ -12,17 +12,17 @@ Giao diện dùng nền tối tím, logo và hàng đợi. Icon extension và lo
 4. Ghim tiện ích nếu muốn, bấm biểu tượng tiện ích để mở side panel. Icon dùng ảnh chân dung bạn cung cấp.
 5. Tải lại các tab Flow hoặc ChatGPT đang mở để Chrome gắn content script mới.
 
-Sau mỗi lần sửa mã, tải lại tiện ích tại `chrome://extensions` **và tải lại tab dịch vụ**. Không cần quyền `scripting` để tiêm mã.
+Sau mỗi lần sửa mã, tải lại tiện ích tại `chrome://extensions` **và tải lại tab Flow/ChatGPT** nếu dùng hai provider đó. Muse không cần tab dịch vụ. Không cần quyền `scripting` để tiêm mã.
 
 Nếu Chrome hỏi quyền trang `flow.google.com` hoặc `chatgpt.com`, hãy cấp quyền để tiện ích nhận diện và điều khiển tab dịch vụ tương ứng. Sau đó tải lại tab đó. Các quyền này chỉ áp dụng cho Flow và ChatGPT, không phải mọi trang web.
 
 ## Cách dùng
 
-1. Chọn **Google Flow** hoặc **ChatGPT** ở đầu panel. Mở dự án Flow (`flow.google.com/project/...` hoặc `labs.google/fx/.../tools/flow`) hoặc mở `chatgpt.com` và đăng nhập nếu cần.
+1. Chọn **Google Flow**, **ChatGPT** hoặc **Muse API** ở đầu panel. Flow cần dự án (`flow.google.com/project/...` hoặc `labs.google/fx/.../tools/flow`); ChatGPT cần tab `chatgpt.com` đã đăng nhập. Muse chạy trực tiếp, không cần mở trang.
 2. Với Flow, chọn **Ảnh** hoặc **Video** cho khớp chế độ trên Flow; dùng 1 kết quả mỗi lượt và đảm bảo ô prompt hiện sẵn. Với ChatGPT, tiện ích gửi mỗi dòng kèm yêu cầu tạo một ảnh và dòng `Số thứ tự: N` để đối chiếu. Dòng này có thể ảnh hưởng đôi chút đến cách mô hình hiểu prompt; yêu cầu không vẽ dòng này vào ảnh được thêm vào tin nhắn. Chọn **Dừng và chạy lại sau mỗi (prompt)** để đặt chu kỳ; ở mỗi mốc, tiện ích bấm Dừng ChatGPT, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó trước khi tiếp tục. Chọn chế độ ChatGPT có thể tạo ảnh. ChatGPT không hỗ trợ video trong tiện ích.
-3. Mở panel. Nếu có nhiều tab cùng dịch vụ, chọn đúng tab trong danh sách. Panel giữ nguyên tab đó suốt phiên. **Làm mới** chỉ kiểm tra kết nối, không tạo ảnh.
+3. Với Muse, nhập địa chỉ API và mật khẩu rồi bấm **Kiểm tra kết nối**. Kiểm tra thành công khi API phản hồi HTTP 400 với `{"error":"empty"}`; đây là phản hồi dự kiến cho mô tả trống và xác nhận mật khẩu hợp lệ. Chọn khung hình `16:9` hoặc `9:16`, thời lượng 5–15 giây và bật/tắt **Tự động nối tiếp video trước**. Muse gửi prompt tuần tự, poll mỗi 5 giây, tải tệp MP4 có header xác thực và có thể nối task trước đã hoàn tất. Tăng timeout lên đủ dài vì video mất vài phút. Nếu chọn Flow/ChatGPT, mở **Tùy chọn bổ sung**, chọn tab đúng; **Làm mới** chỉ kiểm tra kết nối tab.
 4. Dán prompt, mỗi dòng một prompt, hoặc chọn tệp `.txt` UTF-8 (tối đa 1 MB, nội dung tối đa 500.000 ký tự). Bỏ qua dòng trống; hỗ trợ LF, CRLF, CR và BOM. Mỗi phiên tối đa 500 prompt, mỗi prompt tối đa 10.000 ký tự.
-5. Nếu muốn bắt đầu tại vị trí cụ thể, nhập số ở **Bắt đầu từ prompt số** (ví dụ `40` hoặc `99`). Các mục trước đó được đánh dấu bỏ qua; mục đã hoàn tất ở vị trí này trở lên sẽ được chạy lại. Để trống, tiện ích tự tiếp tục từ mục chưa hoàn tất. Chọn **Phần thêm cuối tên ảnh** (mặc định `tuhamho`) và **Thư mục lưu (trong Downloads)** (mặc định `tuhamho_flow`). Ảnh được đặt tên theo dạng `001_<tên ảnh>_tuhamho.png`; tên ảnh ưu tiên nhãn ảnh của trang, nếu trang không cung cấp thì dùng đoạn mô tả đầu prompt. Video giữ dạng `001_tuhamho.mp4`. Bật/tắt đánh số; nếu tắt, tiện ích thêm mã lượt để tránh trùng tên. Chọn khoảng nghỉ và thời gian chờ kết quả trong **Tùy chọn bổ sung**. Ký tự không hợp lệ được thay thế; đường dẫn/tên mẫu hiện ngay dưới ô nhập. Không nhập đường dẫn tuyệt đối hay nhiều cấp thư mục.
+5. Nếu muốn bắt đầu tại vị trí cụ thể, nhập số ở **Bắt đầu từ prompt số** (ví dụ `40` hoặc `99`). Các mục trước đó được đánh dấu bỏ qua; mục đã hoàn tất ở vị trí này trở lên sẽ được chạy lại. Để trống, tiện ích tự tiếp tục từ mục chưa hoàn tất. Chọn **Phần thêm cuối tên ảnh/video** (mặc định `tuhamho`) và thư mục lưu (mặc định `tuhamho_flow`). Tệp được đánh số, ví dụ `001_<tên ảnh>_tuhamho.png` hoặc video `001_tuhamho.mp4`. Bật/tắt đánh số; nếu tắt, tiện ích thêm mã lượt để tránh trùng tên. Chọn khoảng nghỉ và timeout trong **Tùy chọn bổ sung**. Ký tự không hợp lệ được thay thế; không nhập đường dẫn tuyệt đối hay nhiều cấp thư mục.
 6. Bấm **Bắt đầu** để gửi danh sách tới dịch vụ đã chọn và tải kết quả. Hành động dùng hạn mức tài khoản của dịch vụ. Sau khi hàng đợi báo bắt đầu, có thể đóng panel hoặc chuyển sang tab khác; giữ tab Flow/ChatGPT đang xử lý mở và tránh tạo nội dung thủ công trên tab đó.
 7. Theo dõi prompt hiện tại, hàng đợi và số **hoàn thành**. Một mục chỉ hoàn thành sau khi Chrome xác nhận tệp tải xong. Khoảng nghỉ ngẫu nhiên được áp dụng sau mỗi tệp tải xong, trước prompt kế tiếp.
 8. Bấm **Dừng** để ngừng chờ/nhập và không gửi prompt kế tiếp. Yêu cầu đã gửi cho dịch vụ có thể vẫn tiếp tục tạo ảnh; tiện ích không hủy tác vụ trên máy chủ. Lượt tải do phiên này khởi tạo sẽ được yêu cầu hủy nếu chưa hoàn tất; tệp đã tải xong không bị xóa.
@@ -38,16 +38,20 @@ Danh sách quyền chính xác trong manifest:
 | Quyền | Mục đích |
 | --- | --- |
 | `sidePanel` | Mở bảng điều khiển bên cạnh trang khi người dùng bấm biểu tượng tiện ích. |
-| `storage` | Lưu prompt, tùy chọn và tiến độ hàng đợi trong `chrome.storage.local` trên máy, không đồng bộ tài khoản. |
+| `storage` | Lưu prompt, tùy chọn và tiến độ hàng đợi trong `chrome.storage.local` trên máy, không đồng bộ tài khoản. Mật khẩu Muse API cũng được lưu tại đây để dùng lại trên máy này. |
 | `downloads` | Tạo lượt tải ảnh/video bằng `chrome.downloads.download`, theo dõi hoàn tất/lỗi và hủy đúng lượt tải của phiên khi dừng. |
+| `offscreen` | Dùng trang extension ẩn để tải MP4 Muse có header xác thực, tạo Blob URL và chuyển cho Chrome Downloads; service worker MV3 không tạo Blob URL trực tiếp. |
 | Host `https://labs.google/*` và `https://flow.google.com/*` | Tìm tab Flow cũ/mới và chạy content script chỉ trên trang công cụ Flow. |
 | Host `https://chatgpt.com/*` | Tìm tab ChatGPT và chạy content script trên giao diện ChatGPT để gửi prompt, nhận biết ảnh mới. Không chạy trên các trang OpenAI khác. |
+| Host `https://tuhamho-muse.serveousercontent.com/*` | Cho phép service worker gọi Muse API và offscreen helper tải MP4 có xác thực. |
 
 Không xin `tabs`, `scripting`, `debugger`, `activeTab`, `cookies`, `webRequest`, `history`, `<all_urls>` hoặc quyền host của CDN ảnh. Các hàm `chrome.tabs` chỉ tìm/kiểm tra tab dịch vụ đã chọn và liên lạc với content script. Script ChatGPT chỉ chạy tại `chatgpt.com`; script Flow chỉ chạy tại đường dẫn công cụ Flow. Cả hai không chạy trong iframe.
 
-- Không có máy chủ, analytics, quảng cáo, thư viện/font từ xa, `eval`, Function constructor hay mã làm rối. Mọi script và CSS đều cục bộ.
+Manifest đặt `connect-src` là `https://tuhamho-muse.serveousercontent.com`. Nếu đổi Muse API sang host khác, thêm host đó vào `host_permissions` **và** thêm origin tương ứng vào `content_security_policy.extension_pages.connect-src` trong `manifest.json`, sau đó tải lại tiện ích. Chỉ đổi địa chỉ trong panel chưa cấp quyền truy cập host mới. Mật khẩu API được lưu trong `chrome.storage.local` trên máy này, không đưa vào log hoặc trạng thái hàng đợi.
+
+- Không có máy chủ cục bộ, analytics, quảng cáo, thư viện/font từ xa, `eval`, Function constructor hay mã làm rối. Muse API là dịch vụ từ xa do người dùng chọn. Mọi script và CSS của extension đều cục bộ.
 - Không dùng API để đọc cookie, mật khẩu, token, thông tin đăng nhập, lịch sử duyệt web hay nội dung toàn trang. Chỉ tìm editor/nút gửi và ảnh mới trong câu trả lời assistant; trên Flow chỉ kiểm tra thành phần cần cho quy trình tạo. URL tệp kết quả được chuyển tạm thời cho Chrome Downloads, không lưu hoặc ghi vào log.
-- Chỉ **prompt, tùy chọn và trạng thái từng mục hàng đợi** được lưu trong `chrome.storage.local` (khóa `settings`, `queueState`) trên máy, không đồng bộ. Tiến độ gồm prompt, trạng thái và mô tả trạng thái; không lưu ảnh, URL kết quả, mã tải hay dữ liệu DOM. Khi bấm Bắt đầu/Tiếp tục, prompt được chuyển tới trang dịch vụ đã chọn. Dịch vụ đó xử lý prompt theo tài khoản đang đăng nhập; tiện ích không trích xuất thông tin xác thực.
+- **Prompt, tùy chọn và trạng thái hàng đợi** được lưu trong `chrome.storage.local` (khóa `settings`, `queueState`) trên máy, không đồng bộ. Với Muse, settings còn chứa mật khẩu API và queue state chứa task ID để nối tiếp video sau khi chạy lại. Không lưu ảnh, URL kết quả hoặc dữ liệu DOM. Khi bấm Bắt đầu/Tiếp tục, prompt được chuyển tới provider đã chọn; Flow/ChatGPT xử lý theo tài khoản đang đăng nhập, còn Muse nhận prompt và mật khẩu qua HTTPS.
 - Với ảnh, tiện ích thử xuất pixel của **thẻ ảnh kết quả mới** sang PNG bằng canvas cục bộ. Nếu Chrome chặn do CORS, tiện ích chuyển đúng URL HTTPS của ảnh vừa hiển thị cho `chrome.downloads.download` và lưu vào thư mục con đã chọn. Không chụp màn hình. Nếu URL là ảnh xem trước, tệp tải có thể là ảnh xem trước; định dạng thực có thể khác đuôi đoán từ URL.
 - Với video, tiện ích **không dùng thumbnail làm kết quả**. Nó đợi thẻ video sẵn sàng hoặc link tải MP4/WebM rõ ràng. `blob:`, `data:video` và HTTPS cùng origin Flow được thử đọc cục bộ (fetch đặt `credentials: "omit"`, cấm redirect); video ở URL HTTPS thuộc hạ tầng media Google được giao cho Chrome Downloads tải trực tiếp. Giới hạn 30 MB chỉ áp dụng cho đường truyền video qua data URL nội bộ, không áp dụng cho lượt tải HTTPS trực tiếp. Không gọi XMLHttpRequest, WebSocket hoặc máy chủ riêng.
 - Với ChatGPT, tiện ích gửi prompt kèm câu yêu cầu tạo một ảnh, chờ ảnh mới trong câu trả lời assistant và gửi URL ảnh cho Chrome Downloads. ChatGPT có thể thay đổi giao diện, hỏi lại hoặc trả lời bằng văn bản; khi không tìm thấy ảnh, hàng đợi báo lỗi và không tự gửi lại. Chỉ hỗ trợ ảnh, không video.
@@ -88,6 +92,7 @@ Các giới hạn cần kiểm tra thực tế:
 ```text
 manifest.json       Quyền, service worker, side panel, phạm vi content script
 background.js       Điều phối hàng đợi, heartbeat tab, tải tệp và lưu tiến độ
+muse-offscreen.html/.js Tải MP4 Muse có xác thực và tạo Blob URL cho Chrome Downloads
 shared.js           Kiểm tra URL, prompt, tùy chọn và tên tệp
 content.js          Nhập DOM, bấm tạo một lần, chờ và xuất ảnh/video
 chatgpt.js          Gửi prompt ảnh ChatGPT, nhận ảnh mới trong câu trả lời

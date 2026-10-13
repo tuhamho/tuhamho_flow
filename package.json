@@ -1,6 +1,6 @@
 {
   "name": "tuhamho-flow-extension-tests",
-  "version": "1.5.28",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/core.test.cjs",

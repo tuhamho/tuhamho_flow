@@ -17,7 +17,7 @@ function publish(run, extra = {}) {
     provider: run.provider,
     mediaType: run.mediaType,
     prompts: run.items.map(item => item.prompt),
-    items: run.items.map(item => ({ status: item.status, detail: item.detail })),
+    items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })),
     updatedAt: Date.now()
   };
   run.state = state;
@@ -126,28 +126,150 @@ async function downloadResult(result, filename, extension, run) {
   });
   check(run);
 }
+function museError(message, code = "MUSE_ERROR") {
+  const error = new Error(message); error.code = code; return error;
+}
+function museHttpError(status, payload) {
+  if (status === 401) return museError("Sai mật khẩu API, kiểm tra lại trong cài đặt.", "MUSE_AUTH");
+  if (status === 400) return museError(String(payload?.error || "Muse API từ chối yêu cầu (HTTP 400)."), "MUSE_BAD_REQUEST");
+  return museError(`Muse API trả lỗi HTTP ${status}.`, "MUSE_HTTP");
+}
+async function museFetch(url, options, run, deadline) {
+  check(run);
+  const remaining = Math.max(1, deadline - Date.now());
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  run.controller.signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => controller.abort(), remaining);
+  try {
+    return await fetch(url, { credentials: "omit", redirect: "error", ...options, signal: controller.signal });
+  } catch (error) {
+    check(run);
+    if (Date.now() >= deadline) throw museError("Hết thời gian chờ Muse API.", "MUSE_TIMEOUT");
+    throw museError(`Không kết nối được Muse API: ${error?.message || "lỗi mạng"}`, "MUSE_NETWORK");
+  } finally {
+    clearTimeout(timer); run.controller.signal.removeEventListener("abort", abort);
+  }
+}
+async function museJson(response) {
+  try { return await response.json(); }
+  catch { throw museError("Muse API trả về JSON không hợp lệ.", "MUSE_RESPONSE"); }
+}
+async function ensureMuseOffscreen() {
+  const documentUrl = chrome.runtime.getURL("muse-offscreen.html");
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"], documentUrls: [documentUrl] });
+  if (contexts.length) return;
+  await chrome.offscreen.createDocument({ url: "muse-offscreen.html", reasons: ["BLOBS"],
+    justification: "Tải video Muse cần xác thực rồi tạo Blob URL để Chrome Downloads lưu được tệp." });
+}
+async function downloadMuseVideo(baseUrl, password, videoPath, filename, run) {
+  check(run);
+  await ensureMuseOffscreen(); check(run);
+  const requestId = crypto.randomUUID();
+  const message = { type: "MUSE_DOWNLOAD_VIDEO", requestId, baseUrl, password, videoPath, filename };
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return; settled = true; run.controller.signal.removeEventListener("abort", onAbort);
+      error ? reject(error) : resolve(value);
+    };
+    const onAbort = () => {
+      chrome.runtime.sendMessage({ type: "MUSE_CANCEL_DOWNLOAD", requestId }).catch(() => {});
+      finish(new Error(run.reason || "Đã dừng."));
+    };
+    run.controller.signal.addEventListener("abort", onAbort, { once: true });
+    chrome.runtime.sendMessage(message).then(response => {
+      if (!response?.ok) return finish(museError(response?.error || "Không tải được video Muse.", response?.code || "MUSE_DOWNLOAD"));
+      finish(null, response);
+    }).catch(error => finish(museError(`Không tải được video Muse: ${error?.message || "lỗi kết nối"}`, "MUSE_DOWNLOAD")));
+    if (run.controller.signal.aborted) onAbort();
+  });
+}
+async function runMuseItem(run, config, item, index, batchId) {
+  const deadline = Date.now() + config.timeout * 1000;
+  const previous = index > 0 && run.items[index - 1]?.status === "done" ? run.items[index - 1].taskId : "";
+  const previousTaskId = U.museContinuationId(config.museAutoChain, previous, index);
+  const body = U.buildMuseVideoBody(item.prompt, config.museFrame, config.museSeconds, previousTaskId);
+  const headers = { "Content-Type": "application/json", "X-API-Password": config.musePassword };
+  const createResponse = await museFetch(`${config.museBaseUrl}/api/video`, { method: "POST", headers, body: JSON.stringify(body) }, run, deadline);
+  const createData = await museJson(createResponse);
+  if (!createResponse.ok) throw museHttpError(createResponse.status, createData);
+  if (typeof createData.id !== "string" || !createData.id.trim() || createData.id.length > 200) {
+    throw museError("Muse API không trả task ID hợp lệ.", "MUSE_RESPONSE");
+  }
+  item.taskId = createData.id.trim(); publish(run);
+  run.status = `Đang tạo cảnh ${index + 1}/${run.items.length}…`; item.status = "generating"; publish(run);
+  while (Date.now() < deadline) {
+    check(run);
+    const resultResponse = await museFetch(`${config.museBaseUrl}/api/video/result/${encodeURIComponent(item.taskId)}`,
+      { headers: { "X-API-Password": config.musePassword } }, run, deadline);
+    const pollData = await museJson(resultResponse);
+    if (!resultResponse.ok) throw museHttpError(resultResponse.status, pollData);
+    const parsed = U.parseMusePollResult(pollData);
+    if (parsed.status === "error") throw museError(parsed.error, "MUSE_TASK_ERROR");
+    if (parsed.status === "ok") {
+      const videoFilename = U.filename(config, index, batchId, "mp4");
+      item.status = "downloading"; run.status = `Đang tải video ${index + 1}/${run.items.length}…`; publish(run);
+      await downloadMuseVideo(config.museBaseUrl, config.musePassword, parsed.videoUrl, videoFilename, run);
+      return { taskId: item.taskId, duration: parsed.duration };
+    }
+    run.status = `Đang tạo cảnh ${index + 1}/${run.items.length}…`; publish(run);
+    await sleep(Math.min(5000, Math.max(1, deadline - Date.now())), run);
+  }
+  throw museError("Hết thời gian chờ Muse API.", "MUSE_TIMEOUT");
+}
+async function testMuseConnection(config) {
+  let baseUrl;
+  try { baseUrl = U.normalizeMuseBaseUrl(config?.museBaseUrl); }
+  catch (error) { return { ok: false, error: error.message }; }
+  const password = String(config?.musePassword || "");
+  if (!password.trim()) return { ok: false, error: "Hãy nhập mật khẩu Muse API." };
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`${baseUrl}/api/video`, { method: "POST", headers: {
+      "Content-Type": "application/json", "X-API-Password": password
+    }, body: JSON.stringify({ mo_ta: "", khung_hinh: "16:9", so_giay: 10 }), signal: controller.signal });
+    let data = {}; try { data = await response.json(); } catch {}
+    if (response.status === 401) return { ok: false, error: "Sai mật khẩu API, kiểm tra lại trong cài đặt." };
+    if (response.status === 400 && data.error === "empty") return { ok: true, status: "Kết nối Muse API thành công · mật khẩu đúng." };
+    if (response.status === 400) return { ok: false, error: String(data.error || "Muse API từ chối yêu cầu.") };
+    return { ok: false, error: `Muse API trả phản hồi HTTP ${response.status}, không khớp kiểm tra kết nối.` };
+  } catch (error) {
+    return { ok: false, error: error?.name === "AbortError" ? "Hết thời gian kiểm tra kết nối Muse API." : `Không kết nối được Muse API: ${error?.message || "lỗi mạng"}` };
+  } finally { clearTimeout(timer); }
+}
 async function runQueue(run, config, startIndex) {
-  const service = run.provider === "chatgpt" ? "ChatGPT" : "Flow";
+  const muse = run.provider === "muse";
+  const service = run.provider === "chatgpt" ? "ChatGPT" : muse ? "Muse API" : "Flow";
   let heartbeat;
   try {
-    const tab = await chrome.tabs.get(run.tabId);
-    if (run.provider === "chatgpt" ? !U.isChatGPTUrl(tab.url) : !U.isFlowUrl(tab.url)) throw new Error(`Tab đã chọn không còn ở ${service}.`);
-    const pingType = run.provider === "chatgpt" ? "CHATGPT_PING" : "FLOW_PING";
-    const ping = await chrome.tabs.sendMessage(run.tabId, { type: pingType }, { frameId: 0 }).catch(() => null);
-    if (!ping?.ok) throw new Error(`Không kết nối được ${service}. Tải lại tab rồi thử lại.`);
-    run.port = chrome.tabs.connect(run.tabId, { name: run.provider === "chatgpt" ? "chatgpt-batch-work" : "flow-batch-work", frameId: 0 });
-    // Content script trả lời heartbeat định kỳ để service worker được đánh thức
-    // trong khi đang chờ thời gian dài; không phụ thuộc vào panel còn mở.
-    run.port.onMessage.addListener(message => { if (message?.type === "ALIVE") run.lastHeartbeat = Date.now(); });
-    run.port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (!run.finishing) halt(run, `Mất kết nối với tab ${service}.`); });
-    heartbeat = setInterval(() => {
-      if (run.controller.signal.aborted) return;
-      try { run.port.postMessage({ type: "HEARTBEAT" }); } catch { halt(run, `Mất kết nối với tab ${service}.`); }
-    }, 10000);
+    if (!muse) {
+      const tab = await chrome.tabs.get(run.tabId);
+      if (run.provider === "chatgpt" ? !U.isChatGPTUrl(tab.url) : !U.isFlowUrl(tab.url)) throw new Error(`Tab đã chọn không còn ở ${service}.`);
+      const pingType = run.provider === "chatgpt" ? "CHATGPT_PING" : "FLOW_PING";
+      const ping = await chrome.tabs.sendMessage(run.tabId, { type: pingType }, { frameId: 0 }).catch(() => null);
+      if (!ping?.ok) throw new Error(`Không kết nối được ${service}. Tải lại tab rồi thử lại.`);
+      run.port = chrome.tabs.connect(run.tabId, { name: run.provider === "chatgpt" ? "chatgpt-batch-work" : "flow-batch-work", frameId: 0 });
+      run.port.onMessage.addListener(message => { if (message?.type === "ALIVE") run.lastHeartbeat = Date.now(); });
+      run.port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (!run.finishing) halt(run, `Mất kết nối với tab ${service}.`); });
+      heartbeat = setInterval(() => {
+        if (run.controller.signal.aborted) return;
+        try { run.port.postMessage({ type: "HEARTBEAT" }); } catch { halt(run, `Mất kết nối với tab ${service}.`); }
+      }, 10000);
+    }
     const batchId = new Date().toISOString().replace(/[:.]/g, "-");
     for (let i = startIndex; i < run.items.length; i++) {
       check(run); const item = run.items[i]; run.index = i;
       item.status = "typing"; item.detail = ""; run.status = `Đang nhập prompt ${i + 1} / ${run.items.length}…`; publish(run);
+      if (muse) {
+        item.status = "generating"; run.status = `Đang tạo cảnh ${i + 1}/${run.items.length}…`; publish(run);
+        const result = await runMuseItem(run, config, item, i, batchId);
+        check(run);
+        item.status = "done"; item.taskId = result.taskId; item.detail = `Tệp đã tải xong · ${result.duration} giây.`;
+        run.status = `${i + 1} / ${run.items.length} hoàn thành · video dài ${result.duration} giây.`; publish(run);
+        if (i < run.items.length - 1) await sleep((config.delayMin + Math.random() * (config.delayMax - config.delayMin)) * 1000, run);
+        continue;
+      }
       const makeRequest = cancelAfterSend => {
         const id = crypto.randomUUID();
         return request(run.port, { type: "RUN", id, index: i + 1, prompt: item.prompt, timeout: config.timeout, mediaType: config.mediaType, provider: config.provider, cancelAfterSend,
@@ -220,7 +342,7 @@ async function runQueue(run, config, startIndex) {
     run.status = `Hoàn thành ${run.items.length} prompt. Tệp ở Downloads/${config.folder}.`;
   } catch (error) {
     const item = run.items[run.index];
-    if (item && item.status !== "done") { item.status = run.userStopped ? "stopped" : error.code === "TIMEOUT" ? "timeout" : "error"; item.detail = run.reason || error.message; }
+    if (item && item.status !== "done") { item.status = run.userStopped ? "stopped" : ["TIMEOUT", "MUSE_TIMEOUT"].includes(error.code) ? "timeout" : "error"; item.detail = run.reason || error.message; }
     for (const pending of run.items) if (pending.status === "pending") { pending.status = "stopped"; pending.detail = "Chưa gửi."; }
     run.status = run.userStopped ? "Đã dừng. Mục đang dở cần kiểm tra trước khi tiếp tục." : "Hàng đợi đã dừng vì lỗi.";
     run.error = run.userStopped ? "" : error.message;
@@ -228,8 +350,9 @@ async function runQueue(run, config, startIndex) {
     run.finishing = true; clearInterval(heartbeat);
     try { run.port?.postMessage({ type: "STOP" }); } catch {}
     run.port?.disconnect(); run.finished = true;
+    if (muse) await chrome.offscreen.closeDocument().catch(() => {});
     await chrome.storage.local.set({ queueState: { version: 1, provider: run.provider, mediaType: run.mediaType,
-      prompts: run.items.map(item => item.prompt), items: run.items.map(item => ({ status: item.status, detail: item.detail })), updatedAt: Date.now() } }).catch(() => {});
+      prompts: run.items.map(item => item.prompt), items: run.items.map(item => ({ status: item.status, detail: item.detail, ...(item.taskId ? { taskId: item.taskId } : {}) })), updatedAt: Date.now() } }).catch(() => {});
     chrome.runtime.sendMessage({ type: "QUEUE_UPDATE", running: false, state: run.state, status: run.status, error: run.error || "" }).catch(() => {});
     if (activeRun === run) activeRun = null;
   }
@@ -249,13 +372,13 @@ function handlePanelMessage(message, respond) {
   let config;
   try { config = U.validate(message.config); }
   catch (error) { respond({ ok: false, error: error.message }); return false; }
-  if (!Number.isInteger(message.tabId)) { respond({ ok: false, error: "Chưa chọn tab dịch vụ." }); return false; }
+  if (config.provider !== "muse" && !Number.isInteger(message.tabId)) { respond({ ok: false, error: "Chưa chọn tab dịch vụ." }); return false; }
   starting = true;
   chrome.storage.local.get("queueState").then(data => {
     const saved = data.queueState;
     const sameQueue = saved?.version === 1 && saved.provider === config.provider && saved.mediaType === config.mediaType &&
       JSON.stringify(saved.prompts) === JSON.stringify(config.prompts) && Array.isArray(saved.items) && saved.items.length === config.prompts.length;
-    const items = sameQueue ? config.prompts.map((prompt, index) => ({ prompt, status: saved.items[index]?.status || "pending", detail: saved.items[index]?.detail || "" }))
+    const items = sameQueue ? config.prompts.map((prompt, index) => ({ prompt, status: saved.items[index]?.status || "pending", detail: saved.items[index]?.detail || "", ...(saved.items[index]?.taskId ? { taskId: saved.items[index].taskId } : {}) }))
       : config.prompts.map(prompt => ({ prompt, status: "pending", detail: "" }));
     // A value explicitly entered in the panel is one-based. It intentionally
     // restarts from that item, while blank keeps the normal resume behavior.
@@ -282,5 +405,9 @@ function handlePanelMessage(message, respond) {
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(extensionPrefix)) return;
+  if (message?.type === "MUSE_TEST_CONNECTION") {
+    testMuseConnection(message.config).then(respond).catch(error => respond({ ok: false, error: error?.message || "Không kiểm tra được Muse API." }));
+    return true;
+  }
   if (handlePanelMessage(message, respond)) return true;
 });

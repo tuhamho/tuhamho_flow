@@ -197,7 +197,12 @@ async function panelPage() {
       }; mock.ports.push(instance); return instance;
     };
     globalThis.chrome = {
-      runtime: { connect: () => port('lock') },
+      runtime: { onMessage: event(), connect: () => port('lock'), sendMessage: async message => {
+        if (message?.type === 'GET_QUEUE_STATUS') return { ok: true, running: false, state: null };
+        if (message?.type === 'MUSE_TEST_CONNECTION') return { ok: true, status: 'Kết nối Muse API thành công · mật khẩu đúng.' };
+        if (message?.type === 'START_QUEUE') return { ok: true, running: true };
+        return { ok: true };
+      } },
       storage: { local: { get: async () => mock.values, set: async value => { Object.assign(mock.values, value); }, remove: async key => { delete mock.values[key]; } } },
       tabs: { query: async () => mock.chatgpt ? [{ id: 8, url: 'https://chatgpt.com/c/test', active: true }] : [{ id: 7, url: 'https://flow.google.com/project/test', active: true }], get: async id => ({ id, url: mock.chatgpt ? 'https://chatgpt.com/c/test' : 'https://flow.google.com/project/test' }), sendMessage: async () => ({ ok: true, hasInput: true }), connect: () => port('content'), onRemoved: event(), onUpdated: event() },
       downloads: { onChanged: event(), download: async options => { mock.downloads.push(options); return mock.downloads.length; },
@@ -222,6 +227,19 @@ async function panelPage() {
     const response = await page.evaluate(() => window.results?.find(item => item.type === 'RESULT'));
     assert.equal(response.ok, true); assert.equal(response.extension, 'png'); assert.match(response.downloadUrl, /^https:\/\/chatgpt\.com\/backend-api\//);
     assert.match(await page.locator('#prompt-textarea').inputValue(), /Tạo một hình ảnh dựa trên prompt sau/); await page.close();
+  });
+  await check('Panel Muse ẩn lựa chọn tab, chỉ hiện thiết lập video và kiểm tra kết nối', async () => {
+    const page = await panelPage();
+    await page.locator('#provider').selectOption('muse');
+    assert.equal(await page.locator('#museSettings').isVisible(), true);
+    assert.equal(await page.locator('#museOptions').isVisible(), true);
+    assert.equal(await page.locator('#tabBlock').isVisible(), false);
+    assert.equal(await page.locator('#mediaBlock').isVisible(), false);
+    assert.equal(await page.locator('#mediaType').inputValue(), 'video');
+    await page.locator('#musePassword').fill('test-password');
+    await page.locator('#museTest').click();
+    await page.waitForFunction(() => document.querySelector('#museTestStatus').textContent.includes('mật khẩu đúng'));
+    await page.close();
   });
   await check('ChatGPT: chấp nhận xuống dòng được hiển thị thành khoảng trắng trong composer', async () => {
     const page = await chatgptPage('formatted');

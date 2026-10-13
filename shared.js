@@ -2,7 +2,41 @@
 
 // Dùng chung trong panel và kiểm thử, không có thư viện hay mã từ xa.
 globalThis.FlowUtils = (() => {
-  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", batchEvery: 10, delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow" });
+  const defaults = Object.freeze({ prompts: "", folder: "tuhamho_flow", filenameBase: "tuhamho", serial: true, startFrom: "", batchEvery: 10, delayMin: 5, delayMax: 15, timeout: 240, mediaType: "image", provider: "flow", museBaseUrl: "https://tuhamho-muse.serveousercontent.com", musePassword: "", museFrame: "16:9", museSeconds: 10, museAutoChain: true });
+  const defaultMuseBaseUrl = "https://tuhamho-muse.serveousercontent.com";
+  function normalizeMuseBaseUrl(value = defaultMuseBaseUrl) {
+    let url;
+    try { url = new URL(String(value).trim()); } catch { throw new Error("Địa chỉ Muse API không hợp lệ."); }
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+      throw new Error("Địa chỉ Muse API phải là HTTPS và không chứa tài khoản, query hoặc fragment.");
+    }
+    return url.href.replace(/\/+$/, "");
+  }
+  function buildMuseVideoBody(description, frame = "16:9", seconds = 10, previousTaskId = "") {
+    const moTa = String(description ?? "").trim();
+    if (!moTa) throw new Error("Mô tả video không được để trống.");
+    if (!["16:9", "9:16"].includes(frame)) throw new Error("Khung hình Muse phải là 16:9 hoặc 9:16.");
+    const duration = Number(seconds);
+    if (!Number.isInteger(duration) || duration < 5 || duration > 15) throw new Error("Thời lượng Muse phải từ 5 đến 15 giây.");
+    const body = { mo_ta: moTa, khung_hinh: frame, so_giay: duration };
+    if (typeof previousTaskId === "string" && previousTaskId.trim()) body.tiep_noi_video_id = previousTaskId.trim();
+    return body;
+  }
+  function museContinuationId(enabled, previousTaskId, zeroBasedIndex) {
+    return enabled && Number.isInteger(zeroBasedIndex) && zeroBasedIndex > 0 && typeof previousTaskId === "string" && previousTaskId.trim()
+      ? previousTaskId.trim() : "";
+  }
+  function parseMusePollResult(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Phản hồi Muse API không hợp lệ.");
+    if (value.status === "pending") return { status: "pending" };
+    if (value.status === "error") return { status: "error", error: String(value.error || "Muse API báo lỗi.") };
+    if (value.status !== "ok" || typeof value.video_url !== "string" ||
+        !/^\/results\/[A-Za-z0-9._~!$&'()+,;=@%/-]+\.mp4$/i.test(value.video_url) ||
+        value.video_url.split("/").includes("..") || !Number.isFinite(Number(value.duration)) || Number(value.duration) < 0) {
+      throw new Error("Kết quả Muse API không có video hợp lệ.");
+    }
+    return { status: "ok", videoUrl: value.video_url, duration: Number(value.duration) };
+  }
   function isFlowUrl(value) {
     try {
       const url = new URL(value);
@@ -74,9 +108,16 @@ globalThis.FlowUtils = (() => {
       throw new Error("Thời gian chờ ảnh phải từ 30 đến 900 giây.");
     }
     if (!["image", "video"].includes(settings.mediaType)) throw new Error("Loại kết quả phải là ảnh hoặc video.");
-    const provider = settings.provider === "chatgpt" ? "chatgpt" : "flow";
+    const provider = ["flow", "chatgpt", "muse"].includes(settings.provider) ? settings.provider : "flow";
     if (provider === "chatgpt" && settings.mediaType !== "image") throw new Error("ChatGPT hiện chỉ hỗ trợ tạo ảnh.");
-    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, batchEvery, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider };
+    if (provider === "muse" && settings.mediaType !== "video") throw new Error("Muse API chỉ hỗ trợ tạo video.");
+    const museBaseUrl = normalizeMuseBaseUrl(settings.museBaseUrl || defaultMuseBaseUrl);
+    const musePassword = String(settings.musePassword || "");
+    if (provider === "muse" && !musePassword.trim()) throw new Error("Hãy nhập mật khẩu Muse API.");
+    if (!["16:9", "9:16"].includes(settings.museFrame || "16:9")) throw new Error("Khung hình Muse phải là 16:9 hoặc 9:16.");
+    const museSeconds = Number(settings.museSeconds ?? 10);
+    if (!Number.isInteger(museSeconds) || museSeconds < 5 || museSeconds > 15) throw new Error("Thời lượng Muse phải từ 5 đến 15 giây.");
+    return { prompts, folder: safeSegment(settings.folder), filenameBase: safeSegment(settings.filenameBase || "tuhamho", "tuhamho"), serial: Boolean(settings.serial), startFrom, batchEvery, delayMin: min, delayMax: max, timeout, mediaType: settings.mediaType, provider, museBaseUrl, musePassword, museFrame: settings.museFrame || "16:9", museSeconds, museAutoChain: settings.museAutoChain !== false };
   }
   function imageTitle(prompt, suggested = "") {
     const clean = value => String(value || "").replace(/\s+/g, " ").trim()
@@ -108,5 +149,5 @@ globalThis.FlowUtils = (() => {
       : safeSegment(settings.filenameBase || "tuhamho", "tuhamho");
     return `${safeSegment(settings.folder)}/${prefix}${name}${unique}.${safeExtension}`;
   }
-  return Object.freeze({ defaults, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, imageTitle, filename });
+  return Object.freeze({ defaults, defaultMuseBaseUrl, normalizeMuseBaseUrl, buildMuseVideoBody, museContinuationId, parseMusePollResult, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, imageTitle, filename });
 })();

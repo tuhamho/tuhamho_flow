@@ -7,19 +7,36 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh &amp; video · v1.5.28</span></div></div></header>
+  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh, video &amp; Muse API · v1.6.0</span></div></div></header>
   <div id="conn" class="conn conn--off"><span class="dot" aria-hidden="true"></span><span id="connection" role="status">Đang kiểm tra kết nối…</span></div>
   <form id="settings">
     <fieldset id="fields" disabled>
       <section class="block">
         <label class="lbl" for="provider">Tạo bằng</label>
-        <select id="provider"><option value="flow">Google Flow (ảnh / video)</option><option value="chatgpt">ChatGPT (ảnh)</option></select>
+        <select id="provider"><option value="flow">Google Flow (ảnh / video)</option><option value="chatgpt">ChatGPT (ảnh)</option><option value="muse">Muse API (tạo video trực tiếp)</option></select>
         <p id="providerHint" class="hint">Mở dự án Google Flow và chọn đúng tab ở phần tùy chọn.</p>
       </section>
       <section id="mediaBlock" class="block">
         <label class="lbl" for="mediaType">Loại kết quả</label>
         <select id="mediaType" aria-describedby="mediaHint"><option value="image">Ảnh (PNG / JPEG / WebP)</option><option value="video">Video (.mp4 / .webm)</option></select>
         <p id="mediaHint" class="hint">Chọn cùng loại nội dung đang tạo trên Flow. Video xếp hàng lâu hơn ảnh.</p>
+      </section>
+      <section id="museSettings" class="block" hidden>
+        <label class="lbl" for="museBaseUrl">Muse API · Địa chỉ máy chủ</label>
+        <input id="museBaseUrl" type="url" value="https://tuhamho-muse.serveousercontent.com" autocomplete="url" spellcheck="false">
+        <p class="hint">Đổi host cần thêm host permission và cập nhật connect-src trong manifest.json.</p>
+        <label class="lbl" for="musePassword">Mật khẩu API</label>
+        <input id="musePassword" type="password" autocomplete="new-password">
+        <button id="museTest" type="button" class="btn btn--ghost">Kiểm tra kết nối</button>
+        <p id="museTestStatus" class="hint" role="status"></p>
+      </section>
+      <section id="museOptions" class="block" hidden>
+        <label class="lbl" for="museFrame">Khung hình video</label>
+        <select id="museFrame"><option value="16:9">Ngang 16:9</option><option value="9:16">Dọc 9:16</option></select>
+        <label class="lbl" for="museSeconds">Thời lượng video (giây)</label>
+        <input id="museSeconds" type="number" min="5" max="15" step="1" value="10">
+        <label class="check-row"><input id="museAutoChain" type="checkbox" checked><span>Tự động nối tiếp video trước</span></label>
+        <p class="hint">Prompt tiếp theo sẽ nối từ video trước nếu task trước đã hoàn tất.</p>
       </section>
       <section class="block">
         <label class="lbl" for="prompts">Danh sách prompt</label>
@@ -62,8 +79,8 @@
     </section>
     <details class="extra">
       <summary>Tùy chọn bổ sung</summary>
-      <label id="tabLabel" class="lbl" for="flowTab">Tab Google Flow</label><div class="row"><select id="flowTab" aria-label="Tab cần điều khiển"></select><button id="refresh" type="button" class="btn btn--ghost">Làm mới</button></div>
-      <label class="lbl" for="timeout">Chờ mỗi ảnh tối đa (giây)</label><input id="timeout" type="number" min="30" max="900" value="240" required>
+      <div id="tabBlock"><label id="tabLabel" class="lbl" for="flowTab">Tab Google Flow</label><div class="row"><select id="flowTab" aria-label="Tab cần điều khiển"></select><button id="refresh" type="button" class="btn btn--ghost">Làm mới</button></div></div>
+      <label class="lbl" for="timeout">Chờ kết quả tối đa (giây)</label><input id="timeout" type="number" min="30" max="900" value="240" required>
       <button id="clear" type="button" class="btn btn--ghost">Xóa prompt và tiến độ đã lưu</button>
       <p class="hint">Prompt và tùy chọn chỉ lưu trên máy. Không analytics, không debugger. Bấm Bắt đầu sẽ gửi prompt tới dịch vụ bạn chọn và có thể dùng hạn mức tài khoản.</p>
     </details>
