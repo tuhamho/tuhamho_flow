@@ -3,7 +3,9 @@
 // MV3 service workers cannot create object URLs. This hidden extension document
 // fetches the password-protected result and owns its Blob URL until Downloads finishes.
 const activeDownloads = new Map();
-const trusted = sender => sender?.id === chrome.runtime.id && sender?.url === chrome.runtime.getURL("muse-offscreen.html");
+// The service worker sends runtime messages to this document. `sender.url` is
+// therefore background.js (the sender), not muse-offscreen.html (the receiver).
+const trusted = sender => sender?.id === chrome.runtime.id && sender?.url === chrome.runtime.getURL("background.js");
 
 function waitForDownload(id, operation) {
   return new Promise((resolve, reject) => {

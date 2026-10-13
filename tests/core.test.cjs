@@ -253,6 +253,45 @@ test('Muse worker tạo video tuần tự, nối task trước, tải có xác t
   assert.match(stored.queueState.items[0].detail, /8 giây/);
   assert.ok(updates.some(update => /Đang tạo cảnh 2\/2/.test(update.status || '')));
 });
+test('Muse offscreen nhận lệnh từ service worker và tải kết quả qua fetch có header rồi Blob URL', async () => {
+  const onMessage = event(), onChanged = event(), requests = [], downloads = [], revoked = [];
+  const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'video/mp4' });
+  class TestURL extends URL {
+    static createObjectURL(value) { assert.equal(value, blob); return 'blob:extension/video'; }
+    static revokeObjectURL(value) { revoked.push(value); }
+  }
+  const context = { chrome: {
+    runtime: { id: 'test', getURL: file => `chrome-extension://test/${file}`, onMessage },
+    downloads: { onChanged, download: async options => { downloads.push(options); return 4; },
+      search: async ({ id }) => [{ id, state: 'complete' }], cancel: async () => {} }
+  }, fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, status: 200, blob: async () => blob }; },
+    URL: TestURL,
+    AbortController, setTimeout, clearTimeout };
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'muse-offscreen.js'), 'utf8'), context);
+  const listener = onMessage.callbacks[0];
+  let forgedResponse = false;
+  listener({ type: 'MUSE_DOWNLOAD_VIDEO', requestId: 'forged' },
+    { id: 'test', url: 'chrome-extension://test/sidepanel.html' }, () => { forgedResponse = true; });
+  assert.equal(forgedResponse, false);
+
+  const response = await new Promise(resolve => {
+    const keepChannelOpen = listener({ type: 'MUSE_DOWNLOAD_VIDEO', requestId: 'download-1',
+      baseUrl: 'https://tuhamho-muse.serveousercontent.com', password: 'new-secret',
+      videoPath: '/results/clip.mp4', filename: 'muse_task-1.mp4' },
+    { id: 'test', url: 'chrome-extension://test/background.js' }, resolve);
+    assert.equal(keepChannelOpen, true);
+  });
+  assert.equal(response.ok, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://tuhamho-muse.serveousercontent.com/results/clip.mp4');
+  assert.equal(requests[0].options.headers['X-API-Password'], 'new-secret');
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].url, 'blob:extension/video');
+  assert.equal(downloads[0].filename, 'muse_task-1.mp4');
+  assert.equal(downloads[0].saveAs, false);
+  assert.equal(downloads[0].conflictAction, 'uniquify');
+  assert.deepEqual(revoked, ['blob:extension/video']);
+});
 test('ChatGPT uses the chosen interval, waits after cancelling, retries that prompt, and continues', async () => {
   const onMessage = event(), downloadChanged = event(), stored = {}, promptsSent = [], downloads = [], updates = [];
   let imageId = 0;
