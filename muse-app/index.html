@@ -6,11 +6,11 @@
   <title>Muse AI Studio</title><link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar"><div class="brand-mark">M</div><div><h1>Muse AI Studio</h1><p>Tạo video theo cảnh · chạy trực tiếp qua Muse API</p></div><span id="connection" class="connection">Chưa kết nối</span></header>
+  <header class="topbar"><img class="brand-mark" src="../icons/icon128.png" alt="Muse AI Studio"><div><h1>Muse AI Studio</h1><p>Tạo video theo cảnh · chạy trực tiếp qua Muse API</p></div><span id="connection" class="connection">Chưa kết nối</span></header>
   <main class="layout">
     <section class="workspace">
       <section class="card settings">
-        <div class="section-title"><div><h2>Kết nối Muse</h2><p>Mật khẩu được bảo vệ bằng mã hóa của Windows.</p></div><button id="testConnection" class="button ghost">Kiểm tra kết nối</button></div>
+        <div class="section-title"><div><h2>Kết nối Muse</h2><p>Mật khẩu được lưu trong Windows Credential Manager.</p></div><button id="testConnection" class="button ghost">Kiểm tra kết nối</button></div>
         <div class="grid connection-fields"><label>API base URL<input id="baseUrl" type="url" value="https://tuhamho-muse.serveousercontent.com"></label><label>Mật khẩu API<input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu API"></label></div>
         <div id="message" class="message" role="status"></div>
       </section>
@@ -24,7 +24,7 @@
         <div class="section-title"><div><h2>Cài đặt video</h2><p>Hàng đợi chạy lần lượt; có thể dừng bất kỳ lúc nào.</p></div></div>
         <div class="grid options">
           <label>Dự án chung<select id="project"><option value="">Không chọn dự án</option></select></label>
-          <button id="newProject" class="button ghost align-end">＋ Dự án mới</button>
+          <div class="project-actions"><button id="refreshProjects" class="button ghost align-end">Làm mới</button><button id="newProject" class="button ghost align-end">＋ Dự án mới</button></div>
           <label>Khung hình<select id="frame"><option>16:9</option><option>9:16</option></select></label>
           <label>Thời lượng (giây)<input id="seconds" type="number" min="5" max="15" value="10"></label>
           <label>Timeout mỗi cảnh (phút)<input id="timeout" type="number" min="1" max="60" value="30"></label>
@@ -39,7 +39,7 @@
       </section>
       <section class="card queue-card"><div class="section-title"><div><h2>Hàng đợi</h2><p id="queueStatus">Chưa chạy.</p></div><span id="queueCount" class="pill">0 / 0</span></div><div class="progress"><span id="progressBar"></span></div><div id="queueList" class="queue-list"></div></section>
     </section>
-    <aside class="card library"><div class="section-title"><div><h2>Thư viện Muse</h2><p>Video đã tạo trên tài khoản Muse.</p></div><button id="refreshLibrary" class="button ghost">Làm mới</button></div><div id="libraryStatus" class="subtle">Nhấn “Làm mới” để tải danh sách.</div><div id="libraryList" class="library-list"></div></aside>
+    <aside class="card library"><div class="section-title"><div><h2>Thư viện video Muse</h2><p>Được nhóm theo dự án; bấm Làm mới để đồng bộ.</p></div><button id="refreshLibrary" class="button ghost">Làm mới</button></div><div id="libraryStatus" class="subtle">Nhập mật khẩu để tải thư viện Muse.</div><div id="libraryList" class="library-list"></div></aside>
   </main>
   <script src="../shared.js"></script><script src="renderer.js"></script>
 </body></html>

@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = selector => document.querySelector(selector);
-const ui = Object.fromEntries(["baseUrl", "password", "connection", "message", "testConnection", "promptSource", "addScene", "sceneCount", "sceneList", "project", "newProject", "frame", "seconds", "timeout", "delayMin", "delayMax", "filenameBase", "serial", "autoChain", "errorMode", "chooseFolder", "folderPath", "start", "stop", "queueStatus", "queueCount", "progressBar", "queueList", "refreshLibrary", "libraryStatus", "libraryList"].map(id => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["baseUrl", "password", "connection", "message", "testConnection", "promptSource", "addScene", "sceneCount", "sceneList", "project", "refreshProjects", "newProject", "frame", "seconds", "timeout", "delayMin", "delayMax", "filenameBase", "serial", "autoChain", "errorMode", "chooseFolder", "folderPath", "start", "stop", "queueStatus", "queueCount", "progressBar", "queueList", "refreshLibrary", "libraryStatus", "libraryList"].map(id => [id, document.getElementById(id)]));
 const labels = { pending: "CHỜ", generating: "ĐANG TẠO", downloading: "ĐANG TẢI", done: "HOÀN THÀNH", error: "LỖI", skipped: "BỎ QUA", stopped: "ĐÃ DỪNG" };
 let scenes = [], projects = [], queue = [], running = false, stopRequested = false, requests = new Set(), downloadDirectory = "", sleptDuringRun = 0;
 let previousRun = null;
@@ -146,12 +146,19 @@ async function loadLibrary() {
     ui.libraryList.replaceChildren();
     if (!videos.length) { ui.libraryStatus.textContent = "Chưa có video trong thư viện."; return; }
     ui.libraryStatus.textContent = `${videos.length} video`;
-    for (const video of videos) {
+    const groups = new Map();
+    for (const video of videos) { const key = video.du_an || "Gốc · chưa xếp dự án"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(video); }
+    for (const [projectName, projectVideos] of groups) {
+      const group = document.createElement("section"); group.className = "library-group";
+      const heading = document.createElement("h3"); heading.className = "library-group-title"; heading.textContent = `${projectName} · ${projectVideos.length}`; group.append(heading);
+      ui.libraryList.append(group);
+      for (const video of projectVideos) {
       const card = document.createElement("article"); card.className = "lib-item";
       const thumb = document.createElement("img"); thumb.className = "lib-thumb"; thumb.alt = "Thumbnail video";
-      if (video.thumb_url) thumb.src = await window.museDesktop.thumbnail({ ...credentials(), imagePath: video.thumb_url });
+      group.append(card);
+      if (video.thumb_url) void window.museDesktop.thumbnail({ ...credentials(), imagePath: video.thumb_url }).then(src => { if (src) thumb.src = src; }).catch(() => {});
       const info = document.createElement("div"), title = document.createElement("div"); title.className = "lib-title"; title.textContent = video.title || video.id || "Video Muse";
-      const meta = document.createElement("div"); meta.className = "lib-meta"; meta.textContent = video.du_an || "Gốc";
+      const meta = document.createElement("div"); meta.className = "lib-meta"; meta.textContent = video.duration ? `${video.duration} giây` : "Video Muse";
       const controls = document.createElement("div"); controls.className = "lib-controls";
       const move = document.createElement("select");
       const rootOption = document.createElement("option"); rootOption.value = ""; rootOption.textContent = "Gốc / không dự án"; move.append(rootOption);
@@ -161,7 +168,8 @@ async function loadLibrary() {
       moveButton.addEventListener("click", async () => { try { checkApi(await api(`/api/videos/${encodeURIComponent(video.id)}/move`, "POST", { du_an: move.value || null }, false)); setMessage("Đã chuyển video sang dự án.", "success"); await loadLibrary(); } catch (error) { setMessage(error.message, "error"); } });
       const download = document.createElement("button"); download.className = "button ghost"; download.textContent = "Tải MP4"; download.disabled = !video.video_url;
       download.addEventListener("click", async () => { try { const result = await window.museDesktop.download({ ...credentials(), videoPath: video.video_url, filename: `${video.id || "muse_video"}.mp4`, project: video.du_an || "" }); setMessage(`Đã lưu: ${result.path}`, "success"); } catch (error) { setMessage(error.message, "error"); } });
-      controls.append(move, moveButton, download); info.append(title, meta, controls); card.append(thumb, info); ui.libraryList.append(card);
+      controls.append(move, moveButton, download); info.append(title, meta, controls); card.append(thumb, info);
+      }
     }
   } catch (error) { ui.libraryStatus.textContent = error.message; }
   finally { ui.refreshLibrary.disabled = false; }
@@ -247,6 +255,7 @@ ui.promptSource.addEventListener("input", () => { scenes = FlowUtils.parseMusePr
 ui.addScene.addEventListener("click", () => { scenes.push({ prompt: "", project: "" }); syncSource(); renderScenes(); ui.sceneList.lastElementChild?.querySelector("textarea")?.focus(); });
 ui.testConnection.addEventListener("click", testConnection);
 ui.newProject.addEventListener("click", newProject);
+ui.refreshProjects.addEventListener("click", () => refreshProjects().catch(error => setMessage(error.message, "error")));
 ui.project.addEventListener("change", () => { saveSettings(); renderScenes(); });
 ui.chooseFolder.addEventListener("click", async () => { const folder = await window.museDesktop.chooseFolder(); if (folder) { downloadDirectory = folder; ui.folderPath.textContent = folder; await saveSettings(); } });
 ui.start.addEventListener("click", () => startQueue(0));
@@ -267,7 +276,13 @@ async function init() {
     ui.promptSource.value = scenes.map((scene, index) => `CẢNH ${index + 1}:\n${scene.prompt}`).join("\n\n"); renderQueue(); setStatus("Đã khôi phục hàng đợi. Task đang tạo sẽ tiếp tục poll khi bấm Bắt đầu.");
   } else scenes = FlowUtils.parseMusePrompts(ui.promptSource.value).map(prompt => ({ prompt, project: "" }));
   renderScenes();
-  if (ui.password.value) { try { await refreshProjects(saved.project || ""); } catch (error) { ui.connection.textContent = "Chưa kết nối"; setMessage(error.message, "error"); } }
+  if (ui.password.value) {
+    try {
+      await refreshProjects(saved.project || "");
+      ui.connection.textContent = "Đã kết nối Muse"; ui.connection.className = "connection ok";
+      await loadLibrary();
+    } catch (error) { ui.connection.textContent = "Chưa kết nối"; setMessage(error.message, "error"); }
+  }
 }
 window.museDesktop.onWake(sleptFor => {
   sleptDuringRun += sleptFor;

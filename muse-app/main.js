@@ -15,7 +15,7 @@ const requests = new Map();
 function makeWindow() {
   mainWindow = new BrowserWindow({
     width: 1180, height: 850, minWidth: 860, minHeight: 640,
-    backgroundColor: "#080c12", title: "Muse AI Studio",
+    backgroundColor: "#080c12", title: "Muse AI Studio", icon: path.join(__dirname, "..", "icons", "muse-app.ico"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   mainWindow.loadFile(path.join(__dirname, "index.html"));

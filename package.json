@@ -9,7 +9,7 @@
     "test:muse-ui": "node tests/muse-ui.test.cjs",
     "test:muse-app": "node tests/muse-app.test.cjs",
     "muse-app": "electron muse-app/main.js",
-    "dist:muse": "electron-builder --win portable",
+    "dist:muse": "node scripts/make-muse-icon.cjs && electron-builder --win portable",
     "postinstall": "electron-rebuild -f -w keytar"
   },
   "devDependencies": {
@@ -30,10 +30,14 @@
     "files": [
       "muse-app/**/*",
       "shared.js",
+      "icons/icon128.png",
+      "icons/icon256.png",
+      "icons/muse-app.ico",
       "node_modules/keytar/**/*",
       "package.json"
     ],
     "win": {
+      "icon": "icons/muse-app.ico",
       "target": [
         "portable"
       ],
