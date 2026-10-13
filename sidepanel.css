@@ -213,9 +213,18 @@ progress::-webkit-progress-value { border-radius: 999px; background: linear-grad
 .current { max-height: 100px; overflow: auto; padding: 8px 10px; border-left: 3px solid var(--blue); border-radius: 0 9px 9px 0; color: #b8cddd; background: #13212d; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .queue { display: flex; max-height: 360px; flex-direction: column; gap: 7px; overflow: auto; margin: 0; padding: 2px; list-style: none; }
 .qitem { padding: 9px 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); transition: border-color .15s, background .15s; }
-.qitem:hover { border-color: #3e5a78; }
+.qitem:hover:not(.generating) { border-color: #3e5a78; }
 .qitem.done { border-color: #236751; background: #10241f; }
-.qitem.generating { border-color: #2589e8; background: #122439; }
+.qitem.generating {
+  border-color: transparent;
+  background: linear-gradient(#122439, #122439) padding-box,
+    conic-gradient(from var(--led-angle), #2589e8, #35c6d8, #85e8f1, #2589e8) border-box;
+  box-shadow: 0 0 10px rgb(37 137 232 / 22%);
+}
+@property --led-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.qitem.generating { animation: ledRotate 2.4s linear infinite, ledGlow 1.8s ease-in-out infinite; }
+@keyframes ledRotate { to { --led-angle: 360deg; } }
+@keyframes ledGlow { 50% { box-shadow: 0 0 15px rgb(53 198 216 / 42%); } }
 .qitem.error, .qitem.timeout { border-color: #69404b; background: #271a27; }
 .qitem .num { min-width: 23px; color: #91a0b0; font-variant-numeric: tabular-nums; text-align: right; }
 .item-head { display: flex; align-items: center; gap: 8px; }
@@ -227,6 +236,10 @@ progress::-webkit-progress-value { border-radius: 999px; background: linear-grad
 .tag.skipped { color: #b6c5d6; background: #273447; }
 .tag.error, .tag.timeout { color: #ffaaa5; background: #512b36; }
 .detail { margin: 5px 0 0 31px; color: #91a3b5; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qitem.generating { animation: none; border-color: #35c6d8; box-shadow: 0 0 8px rgb(53 198 216 / 30%); }
+}
 
 .extra { margin-top: 14px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--radius); color: #9aabba; background: var(--surface); font-size: 11px; }
 .extra summary { color: #d8e5f2; font-size: 12px; font-weight: 700; cursor: pointer; }
