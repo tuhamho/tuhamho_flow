@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh, video &amp; Muse API · v1.6.0</span></div></div></header>
+  <header class="head"><div class="brand"><img class="logo" src="icons/icon48.png" alt=""><div><h1>tuhamho<span class="accent">_flow</span></h1><span class="ver">Điều phối ảnh, video &amp; Muse API · v1.6.1</span></div></div></header>
   <div id="conn" class="conn conn--off"><span class="dot" aria-hidden="true"></span><span id="connection" role="status">Đang kiểm tra kết nối…</span></div>
   <form id="settings">
     <fieldset id="fields" disabled>
@@ -40,9 +40,13 @@
       </section>
       <section class="block">
         <label class="lbl" for="prompts">Danh sách prompt</label>
-        <p class="hint">Mỗi dòng là một prompt. Bỏ qua dòng trống.</p>
+        <p id="promptHint" class="hint">Mỗi dòng là một prompt. Bỏ qua dòng trống.</p>
         <textarea id="prompts" rows="6" maxlength="500000" placeholder="A red bicycle on a rainy street&#10;A watercolor fox in a forest&#10;..."></textarea>
         <div class="row"><button id="loadTxt" type="button" class="btn btn--ghost">📄 Tải file .txt</button><input id="txtFile" type="file" accept=".txt,text/plain" hidden><span id="count" class="count">0 prompt</span></div>
+        <section id="museSceneEditors" class="scene-editors" hidden>
+          <div class="scene-head"><span class="lbl">Chỉnh prompt từng cảnh</span><button id="museAddScene" type="button" class="btn btn--ghost">+ Thêm cảnh</button></div>
+          <div id="museSceneList" class="scene-list"></div>
+        </section>
       </section>
       <section class="block">
         <label class="lbl" for="startFrom">Bắt đầu từ prompt số</label>

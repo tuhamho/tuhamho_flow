@@ -2,11 +2,31 @@
 
 const U = FlowUtils;
 const $ = id => document.getElementById(id);
-const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabBlock", "tabLabel", "mediaType", "mediaHint", "museSettings", "museOptions", "museBaseUrl", "musePassword", "museTest", "museTestStatus", "museFrame", "museSeconds", "museAutoChain", "prompts", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
+const ids = ["connection", "flowTab", "refresh", "settings", "fields", "provider", "providerHint", "mediaBlock", "batchBlock", "batchEvery", "tip", "tabBlock", "tabLabel", "mediaType", "mediaHint", "museSettings", "museOptions", "museBaseUrl", "musePassword", "museTest", "museTestStatus", "museFrame", "museSeconds", "museAutoChain", "prompts", "promptHint", "museSceneEditors", "museSceneList", "museAddScene", "count", "loadTxt", "txtFile", "startFrom", "clear", "filenameBase", "folder", "folderPreview", "serial", "delayMin", "delayMax", "timeout", "start", "stop", "status", "error", "progress", "bar", "current", "queue"];
 const ui = Object.fromEntries(ids.map(id => [id, $(id)]));
 const labels = { pending: "Chờ", typing: "Đang nhập", generating: "Đang tạo", downloading: "Đang tải", done: "Hoàn thành", skipped: "Bỏ qua", stopped: "Đã dừng", error: "Lỗi", timeout: "Quá giờ" };
 let items = [], queueMeta = null, currentRun = null, hydrated = false, refreshing = false, saveTimer;
 let saveTail = Promise.resolve();
+function currentPrompts() {
+  return ui.provider.value === "muse" ? U.parseMusePrompts(ui.prompts.value) : U.parsePrompts(ui.prompts.value);
+}
+function updateMuseSceneEditors(scenes = U.parseMusePrompts(ui.prompts.value)) {
+  ui.museSceneList.replaceChildren(...scenes.map((scene, index) => {
+    const card = document.createElement("div"); card.className = "scene-card";
+    const label = document.createElement("label"); label.className = "lbl"; label.htmlFor = `museScene${index}`; label.textContent = `Cảnh ${index + 1}`;
+    const editor = document.createElement("textarea"); editor.id = `museScene${index}`; editor.rows = 3; editor.maxLength = 10000;
+    editor.value = scene; editor.setAttribute("aria-label", `Prompt cảnh ${index + 1}`);
+    editor.addEventListener("input", () => {
+      const values = [...ui.museSceneList.querySelectorAll("textarea")].map(input => input.value);
+      writeMuseScenes(values);
+      scheduleSave();
+    });
+    card.append(label, editor); return card;
+  }));
+}
+function writeMuseScenes(scenes) {
+  ui.prompts.value = scenes.map((value, index) => `CẢNH ${index + 1}:\n${value}`).join("\n\n");
+}
 
 function showError(text = "") { ui.error.textContent = text; ui.error.hidden = !text; }
 function settings() {
@@ -16,7 +36,7 @@ function settings() {
 }
 function queueMatchesCurrent() {
   return Boolean(queueMeta && queueMeta.provider === ui.provider.value && queueMeta.mediaType === ui.mediaType.value &&
-    JSON.stringify(queueMeta.prompts) === JSON.stringify(U.parsePrompts(ui.prompts.value)));
+    JSON.stringify(queueMeta.prompts) === JSON.stringify(currentPrompts()));
 }
 function updateStartLabel() {
   if (currentRun) { ui.start.textContent = "Đang chạy nền…"; return; }
@@ -34,7 +54,7 @@ function persistQueueState() {
   } });
 }
 function preview() {
-  const promptCount = U.parsePrompts(ui.prompts.value).length;
+  const promptCount = currentPrompts().length;
   ui.count.textContent = `${promptCount} prompt`;
   ui.startFrom.max = String(Math.max(1, promptCount));
   const video = ui.mediaType.value === "video";
@@ -45,6 +65,7 @@ function preview() {
   ui.batchBlock.hidden = !chatgpt;
   ui.museSettings.hidden = !muse;
   ui.museOptions.hidden = !muse;
+  ui.museSceneEditors.hidden = !muse || (!currentPrompts().length && !ui.prompts.value.trim());
   ui.tabBlock.hidden = muse;
   ui.providerHint.textContent = muse
     ? "Tạo video trực tiếp qua Muse API, không cần mở tab dịch vụ. Mật khẩu được lưu trong chrome.storage.local trên máy này."
@@ -68,6 +89,12 @@ function preview() {
     : video
     ? "Chờ video thật sẵn sàng, không lấy ảnh thumbnail. Nên tăng thời gian chờ trong Tùy chọn bổ sung."
     : "Chọn Ảnh khi Flow đang tạo ảnh. Không dùng ảnh thumbnail của video làm kết quả.";
+  ui.promptHint.textContent = muse
+    ? "Mỗi cảnh bắt đầu bằng “CẢNH 1:” hoặc cách nhau bằng một dòng trống. Bạn có thể sửa từng cảnh bên dưới."
+    : "Mỗi dòng là một prompt. Bỏ qua dòng trống.";
+  ui.prompts.placeholder = muse
+    ? "CẢNH 1:\nMô tả cảnh đầu tiên...\n\nCẢNH 2:\nMô tả cảnh tiếp theo..."
+    : "A red bicycle on a rainy street\nA watercolor fox in a forest\n...";
   updateStartLabel();
 }
 function saveSettings() {
@@ -184,8 +211,16 @@ chrome.runtime.onMessage.addListener(message => {
   if (message?.type === "QUEUE_UPDATE") applyQueueUpdate(message);
 });
 ui.stop.addEventListener("click", () => { if (currentRun) void chrome.runtime.sendMessage({ type: "STOP_QUEUE" }); });
-ui.fields.addEventListener("input", scheduleSave);
+ui.fields.addEventListener("input", event => {
+  if (event.target === ui.prompts) updateMuseSceneEditors();
+  scheduleSave();
+});
 ui.fields.addEventListener("change", scheduleSave);
+ui.museAddScene.addEventListener("click", () => {
+  const scenes = [...ui.museSceneList.querySelectorAll("textarea")].map(input => input.value);
+  scenes.push(""); writeMuseScenes(scenes); updateMuseSceneEditors(scenes); preview();
+  ui.museSceneList.lastElementChild?.querySelector("textarea")?.focus();
+});
 ui.timeout.addEventListener("input", scheduleSave);
 ui.timeout.addEventListener("change", scheduleSave);
 ui.mediaType.addEventListener("change", () => {
@@ -195,7 +230,7 @@ ui.mediaType.addEventListener("change", () => {
 ui.provider.addEventListener("change", () => {
   if (ui.provider.value === "chatgpt") ui.mediaType.value = "image";
   if (ui.provider.value === "muse") { ui.mediaType.value = "video"; if (Number(ui.timeout.value) === 240) ui.timeout.value = "600"; }
-  scheduleSave(); void refreshTabs();
+  updateMuseSceneEditors(); scheduleSave(); void refreshTabs();
 });
 ui.museTest.addEventListener("click", async () => {
   ui.museTest.disabled = true; ui.museTestStatus.textContent = "Đang kiểm tra Muse API…"; showError();
@@ -220,12 +255,12 @@ ui.txtFile.addEventListener("change", async () => {
     const text = await file.text();
     if (currentRun) return;
     if (text.length > 500000) throw new Error();
-    ui.prompts.value = text.replace(/^\uFEFF/, ""); scheduleSave(); showError();
+    ui.prompts.value = text.replace(/^\uFEFF/, ""); updateMuseSceneEditors(); scheduleSave(); showError();
   } catch { showError("Không đọc được tệp, hoặc nội dung vượt 500.000 ký tự. Hãy lưu tệp dưới dạng UTF-8."); }
 });
 ui.clear.addEventListener("click", async () => {
   if (currentRun) return;
-  clearTimeout(saveTimer); ui.prompts.value = ""; items = []; queueMeta = null; render(); preview();
+  clearTimeout(saveTimer); ui.prompts.value = ""; updateMuseSceneEditors([]); items = []; queueMeta = null; render(); preview();
   ui.current.textContent = ""; ui.current.hidden = true;
   try { await saveSettings(); await persistQueueState(); ui.status.textContent = "Đã xóa prompt và tiến độ đã lưu trên máy."; showError(); }
   catch { showError("Không xóa được prompt đã lưu. Hãy thử lại."); }
@@ -251,7 +286,7 @@ ui.clear.addEventListener("click", async () => {
     ui.museSeconds.value = Number.isInteger(Number(restored.museSeconds)) && Number(restored.museSeconds) >= 5 && Number(restored.museSeconds) <= 15 ? String(restored.museSeconds) : "10";
     ui.museAutoChain.checked = typeof restored.museAutoChain === "boolean" ? restored.museAutoChain : true;
     const state = data.queueState;
-    const restoredPrompts = U.parsePrompts(ui.prompts.value);
+    const restoredPrompts = ui.provider.value === "muse" ? U.parseMusePrompts(ui.prompts.value) : U.parsePrompts(ui.prompts.value);
     if (state?.version === 1 && ["flow", "chatgpt", "muse"].includes(state.provider) && ["image", "video"].includes(state.mediaType) &&
         state.provider === ui.provider.value && state.mediaType === ui.mediaType.value &&
         JSON.stringify(state.prompts) === JSON.stringify(restoredPrompts) && Array.isArray(state.items) && state.items.length === restoredPrompts.length) {
@@ -265,7 +300,7 @@ ui.clear.addEventListener("click", async () => {
       });
     }
   } catch { showError("Không khôi phục được cài đặt hoặc tiến độ. Đang dùng cài đặt mặc định."); }
-  hydrated = true; toggleRunning(false); preview(); render();
+  hydrated = true; toggleRunning(false); updateMuseSceneEditors(); preview(); render();
   if (items.length) ui.status.textContent = `Đã khôi phục ${items.filter(item => item.status === "done").length} / ${items.length} mục. Bấm “${ui.start.textContent}” để tiếp tục; kiểm tra mục đang dở trước khi gửi lại.`;
   try {
     const running = await chrome.runtime.sendMessage({ type: "GET_QUEUE_STATUS" });

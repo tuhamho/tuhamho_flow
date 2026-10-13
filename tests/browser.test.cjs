@@ -236,6 +236,10 @@ async function panelPage() {
     assert.equal(await page.locator('#tabBlock').isVisible(), false);
     assert.equal(await page.locator('#mediaBlock').isVisible(), false);
     assert.equal(await page.locator('#mediaType').inputValue(), 'video');
+    await page.locator('#prompts').fill('CẢNH 1:\nMở đầu\n\nCẢNH 2:\nKết thúc');
+    assert.equal(await page.locator('#museSceneList textarea').count(), 2);
+    await page.locator('#museSceneList textarea').nth(1).fill('Kết thúc đã sửa');
+    assert.match(await page.locator('#prompts').inputValue(), /CẢNH 2:\nKết thúc đã sửa/);
     await page.locator('#musePassword').fill('test-password');
     await page.locator('#museTest').click();
     await page.waitForFunction(() => document.querySelector('#museTestStatus').textContent.includes('mật khẩu đúng'));

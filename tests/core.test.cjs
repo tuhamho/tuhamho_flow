@@ -52,6 +52,18 @@ test('Muse tạo body API, kiểm tra poll và nối task tuần tự', () => {
   assert.throws(() => U.validate({ ...U.defaults, provider: 'muse', mediaType: 'image', musePassword: 'secret', prompts: 'scene' }));
   assert.throws(() => U.validate({ ...U.defaults, provider: 'muse', mediaType: 'video', prompts: 'scene' }));
 });
+test('Muse tách cảnh theo nhãn CẢNH hoặc dòng trống, vẫn nhận danh sách cũ từng dòng', () => {
+  assert.deepEqual(U.parseMusePrompts('CẢNH 1:\nMột cảnh có nhiều dòng\nchi tiết tiếp theo.\n\nCẢNH 2: Cảnh tiếp theo.'), [
+    'Một cảnh có nhiều dòng\nchi tiết tiếp theo.', 'Cảnh tiếp theo.'
+  ]);
+  assert.deepEqual(U.parseMusePrompts('Một cảnh có nhiều dòng\nchi tiết tiếp theo.\n\nCảnh kế tiếp.'), [
+    'Một cảnh có nhiều dòng\nchi tiết tiếp theo.', 'Cảnh kế tiếp.'
+  ]);
+  assert.deepEqual(U.parseMusePrompts('Cảnh cũ 1\nCảnh cũ 2'), ['Cảnh cũ 1', 'Cảnh cũ 2']);
+  const config = U.validate({ ...U.defaults, provider: 'muse', mediaType: 'video', musePassword: 'pw',
+    prompts: 'CẢNH 1:\nMở cảnh\n\nCẢNH 2:\nKết cảnh', startFrom: '2' });
+  assert.deepEqual(config.prompts, ['Mở cảnh', 'Kết cảnh']); assert.equal(config.startFrom, 2);
+});
 test('Tên tệp chặn traversal, ký tự điều khiển và tên thiết bị Windows', () => {
   for (const folder of ['../outside', '..\\..\\outside', 'C:\\Users\\test', '/', '.', 'CON', 'aux.png', 'COM1', 'lpt²', 'a\u0000b', 'x\u202ey', 'abc. ']) {
     const result = U.filename({ folder, serial: true }, 0, 'batch');

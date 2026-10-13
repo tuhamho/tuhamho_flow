@@ -20,7 +20,7 @@ Nếu Chrome hỏi quyền trang `flow.google.com` hoặc `chatgpt.com`, hãy c�
 
 1. Chọn **Google Flow**, **ChatGPT** hoặc **Muse API** ở đầu panel. Flow cần dự án (`flow.google.com/project/...` hoặc `labs.google/fx/.../tools/flow`); ChatGPT cần tab `chatgpt.com` đã đăng nhập. Muse chạy trực tiếp, không cần mở trang.
 2. Với Flow, chọn **Ảnh** hoặc **Video** cho khớp chế độ trên Flow; dùng 1 kết quả mỗi lượt và đảm bảo ô prompt hiện sẵn. Với ChatGPT, tiện ích gửi mỗi dòng kèm yêu cầu tạo một ảnh và dòng `Số thứ tự: N` để đối chiếu. Dòng này có thể ảnh hưởng đôi chút đến cách mô hình hiểu prompt; yêu cầu không vẽ dòng này vào ảnh được thêm vào tin nhắn. Chọn **Dừng và chạy lại sau mỗi (prompt)** để đặt chu kỳ; ở mỗi mốc, tiện ích bấm Dừng ChatGPT, nghỉ ngẫu nhiên 5–10 giây rồi gửi lại prompt đó trước khi tiếp tục. Chọn chế độ ChatGPT có thể tạo ảnh. ChatGPT không hỗ trợ video trong tiện ích.
-3. Với Muse, nhập địa chỉ API và mật khẩu rồi bấm **Kiểm tra kết nối**. Kiểm tra thành công khi API phản hồi HTTP 400 với `{"error":"empty"}`; đây là phản hồi dự kiến cho mô tả trống và xác nhận mật khẩu hợp lệ. Chọn khung hình `16:9` hoặc `9:16`, thời lượng 5–15 giây và bật/tắt **Tự động nối tiếp video trước**. Muse gửi prompt tuần tự, poll mỗi 5 giây, tải tệp MP4 có header xác thực và có thể nối task trước đã hoàn tất. Tăng timeout lên đủ dài vì video mất vài phút. Nếu chọn Flow/ChatGPT, mở **Tùy chọn bổ sung**, chọn tab đúng; **Làm mới** chỉ kiểm tra kết nối tab.
+3. Với Muse, nhập địa chỉ API và mật khẩu rồi bấm **Kiểm tra kết nối**. Kiểm tra thành công khi API phản hồi HTTP 400 với `{"error":"empty"}`; đây là phản hồi dự kiến cho mô tả trống và xác nhận mật khẩu hợp lệ. Mỗi cảnh có thể bắt đầu bằng nhãn `CẢNH 1:` / `CẢNH 2:` hoặc cách nhau bằng một dòng trống. Khi chọn Muse, panel tách cảnh thành các ô riêng để bạn chỉnh sửa từng cảnh trước khi chạy; danh sách Muse cũ với mỗi dòng một cảnh vẫn được hỗ trợ. Chọn khung hình `16:9` hoặc `9:16`, thời lượng 5–15 giây và bật/tắt **Tự động nối tiếp video trước**. Muse gửi prompt tuần tự, poll mỗi 5 giây, tải tệp MP4 có header xác thực và có thể nối task trước đã hoàn tất. Tăng timeout lên đủ dài vì video mất vài phút. Nếu chọn Flow/ChatGPT, mở **Tùy chọn bổ sung**, chọn tab đúng; **Làm mới** chỉ kiểm tra kết nối tab.
 4. Dán prompt, mỗi dòng một prompt, hoặc chọn tệp `.txt` UTF-8 (tối đa 1 MB, nội dung tối đa 500.000 ký tự). Bỏ qua dòng trống; hỗ trợ LF, CRLF, CR và BOM. Mỗi phiên tối đa 500 prompt, mỗi prompt tối đa 10.000 ký tự.
 5. Nếu muốn bắt đầu tại vị trí cụ thể, nhập số ở **Bắt đầu từ prompt số** (ví dụ `40` hoặc `99`). Các mục trước đó được đánh dấu bỏ qua; mục đã hoàn tất ở vị trí này trở lên sẽ được chạy lại. Để trống, tiện ích tự tiếp tục từ mục chưa hoàn tất. Chọn **Phần thêm cuối tên ảnh/video** (mặc định `tuhamho`) và thư mục lưu (mặc định `tuhamho_flow`). Tệp được đánh số, ví dụ `001_<tên ảnh>_tuhamho.png` hoặc video `001_tuhamho.mp4`. Bật/tắt đánh số; nếu tắt, tiện ích thêm mã lượt để tránh trùng tên. Chọn khoảng nghỉ và timeout trong **Tùy chọn bổ sung**. Ký tự không hợp lệ được thay thế; không nhập đường dẫn tuyệt đối hay nhiều cấp thư mục.
 6. Bấm **Bắt đầu** để gửi danh sách tới dịch vụ đã chọn và tải kết quả. Hành động dùng hạn mức tài khoản của dịch vụ. Sau khi hàng đợi báo bắt đầu, có thể đóng panel hoặc chuyển sang tab khác; giữ tab Flow/ChatGPT đang xử lý mở và tránh tạo nội dung thủ công trên tab đó.
@@ -100,6 +100,7 @@ sidepanel.html      Giao diện tiếng Việt, script cục bộ
 sidepanel.css       Giao diện gọn, co giãn theo chiều rộng panel
 sidepanel.js        Cấu hình, theo dõi và dừng hàng đợi nền
 tests/              Kiểm thử logic và trình duyệt với trang Flow mô phỏng
+muse-ui.test.cjs    Kiểm tra tách, sửa và thêm từng cảnh Muse trên panel
 ```
 
 Kiểm tra JavaScript/JSON bằng Node.js (chỉ dành cho phát triển, không cần để cài extension):
@@ -114,6 +115,7 @@ node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
 node --test tests/core.test.cjs
 node tests/browser.test.cjs
 node tests/extension.test.cjs
+npm run test:muse-ui
 ```
 
 Kiểm thử trình duyệt cần Playwright có sẵn trong môi trường phát triển và Chrome. Có thể đặt `NODE_PATH` tới thư mục node_modules chứa Playwright và `CHROME_PATH` tới Chrome. Các phụ thuộc này **không được nạp bởi extension**. Trang Flow trong kiểm thử do fixture cục bộ mô phỏng, chặn mạng; không đăng nhập hay gửi yêu cầu tạo ảnh thật.

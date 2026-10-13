@@ -82,11 +82,33 @@ globalThis.FlowUtils = (() => {
   function parsePrompts(text) {
     return text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/).map(line => line.trim()).filter(Boolean);
   }
+  function parseMusePrompts(text) {
+    const source = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    const markers = [...source.matchAll(/^[ \t]*CẢNH[ \t]+\d+[ \t]*:[ \t]*/gim)];
+    if (markers.length) {
+      const scenes = [];
+      const preface = source.slice(0, markers[0].index).trim();
+      if (preface) scenes.push(preface);
+      for (let i = 0; i < markers.length; i++) {
+        const start = markers[i].index + markers[i][0].length;
+        const end = markers[i + 1]?.index ?? source.length;
+        const scene = source.slice(start, end).trim();
+        if (scene) scenes.push(scene);
+      }
+      return scenes;
+    }
+    if (/\r?\n[ \t]*\r?\n/.test(source)) {
+      return source.split(/\r?\n[ \t]*\r?\n+/).map(scene => scene.trim()).filter(Boolean);
+    }
+    // Giữ tương thích với danh sách Muse cũ: mỗi dòng không rỗng là một cảnh.
+    return parsePrompts(source);
+  }
   function validate(settings) {
     if (typeof settings.prompts !== "string" || settings.prompts.length > 500000) {
       throw new Error("Danh sách prompt quá lớn (tối đa 500.000 ký tự).");
     }
-    const prompts = parsePrompts(settings.prompts);
+    const provider = ["flow", "chatgpt", "muse"].includes(settings.provider) ? settings.provider : "flow";
+    const prompts = provider === "muse" ? parseMusePrompts(settings.prompts) : parsePrompts(settings.prompts);
     if (!prompts.length) throw new Error("Hãy nhập ít nhất một prompt.");
     if (prompts.length > 500 || prompts.some(prompt => prompt.length > 10000)) {
       throw new Error("Tối đa 500 prompt, mỗi prompt tối đa 10.000 ký tự.");
@@ -108,7 +130,6 @@ globalThis.FlowUtils = (() => {
       throw new Error("Thời gian chờ ảnh phải từ 30 đến 900 giây.");
     }
     if (!["image", "video"].includes(settings.mediaType)) throw new Error("Loại kết quả phải là ảnh hoặc video.");
-    const provider = ["flow", "chatgpt", "muse"].includes(settings.provider) ? settings.provider : "flow";
     if (provider === "chatgpt" && settings.mediaType !== "image") throw new Error("ChatGPT hiện chỉ hỗ trợ tạo ảnh.");
     if (provider === "muse" && settings.mediaType !== "video") throw new Error("Muse API chỉ hỗ trợ tạo video.");
     const museBaseUrl = normalizeMuseBaseUrl(settings.museBaseUrl || defaultMuseBaseUrl);
@@ -149,5 +170,5 @@ globalThis.FlowUtils = (() => {
       : safeSegment(settings.filenameBase || "tuhamho", "tuhamho");
     return `${safeSegment(settings.folder)}/${prefix}${name}${unique}.${safeExtension}`;
   }
-  return Object.freeze({ defaults, defaultMuseBaseUrl, normalizeMuseBaseUrl, buildMuseVideoBody, museContinuationId, parseMusePollResult, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, validate, imageTitle, filename });
+  return Object.freeze({ defaults, defaultMuseBaseUrl, normalizeMuseBaseUrl, buildMuseVideoBody, museContinuationId, parseMusePollResult, isFlowUrl, isFlowMediaUrl, isChatGPTUrl, isChatGPTMediaUrl, safeSegment, parsePrompts, parseMusePrompts, validate, imageTitle, filename });
 })();

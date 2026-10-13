@@ -1,10 +1,11 @@
 {
   "name": "tuhamho-flow-extension-tests",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "scripts": {
     "test": "node --test tests/core.test.cjs",
-    "test:browser": "node --test tests/browser.test.cjs"
+    "test:browser": "node --test tests/browser.test.cjs",
+    "test:muse-ui": "node tests/muse-ui.test.cjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"
